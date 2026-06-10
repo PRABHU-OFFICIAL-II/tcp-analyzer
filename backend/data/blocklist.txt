@@ -1,0 +1,5 @@
+# TCP Analyzer — IOC Blocklist
+# Add one IP address per line. Lines starting with # are ignored.
+# Example:
+# 185.220.101.1
+# 198.51.100.0
