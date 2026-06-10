@@ -1,13 +1,14 @@
 import statistics
 from collections import defaultdict
 from ..models.extended_report import BeaconMetrics, BeaconFlow
-
-MIN_CONNECTIONS = 5
-MAX_CV = 0.3        # coefficient of variation threshold — lower = more regular = more suspicious
+from .. import thresholds
 
 
 def analyze_beacon(packets) -> BeaconMetrics:
     # Track SYN timestamps per (src_ip, dst_ip, dst_port)
+    MIN_CONNECTIONS = thresholds.get("beacon", "min_connections")
+    MAX_CV          = thresholds.get("beacon", "max_cv")
+
     syn_times: dict = defaultdict(list)
 
     for pkt in packets:

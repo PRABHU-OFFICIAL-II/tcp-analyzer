@@ -3,6 +3,7 @@ import UploadPage from "./pages/UploadPage.jsx";
 import ReportPage from "./pages/ReportPage.jsx";
 import HistoryPage from "./pages/HistoryPage.jsx";
 import ComparePage from "./pages/ComparePage.jsx";
+import SettingsPage from "./pages/SettingsPage.jsx";
 
 export default function App() {
   const [view, setView] = useState("upload");
@@ -41,6 +42,9 @@ export default function App() {
   if (view === "compare") {
     return <ComparePage onBack={() => setView("upload")} />;
   }
+  if (view === "settings") {
+    return <SettingsPage onBack={() => setView("upload")} />;
+  }
   return (
     <UploadPage
       onUpload={handleUpload}
@@ -48,6 +52,7 @@ export default function App() {
       error={error}
       onHistory={() => setView("history")}
       onCompare={() => setView("compare")}
+      onSettings={() => setView("settings")}
     />
   );
 }

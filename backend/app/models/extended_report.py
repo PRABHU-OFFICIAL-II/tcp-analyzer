@@ -26,7 +26,7 @@ class FlowMetrics(BaseModel):
     total_flows: int = 0
     flows: List[FlowEntry] = []
     top_talkers: List[TalkerEntry] = []
-    conversation_matrix: List[Dict[str, Any]] = []  # [{src, dst, bytes}]
+    conversation_matrix: List[Dict[str, Any]] = []
 
 
 # ── OS / App fingerprinting ────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ class ARPMetrics(BaseModel):
 
 class IOCMatch(BaseModel):
     ip: str
-    source: str          # "blocklist" or "abuseipdb"
+    source: str
     detail: str
     severity: str
 
@@ -102,7 +102,7 @@ class GeoEntry(BaseModel):
 
 class GeoMetrics(BaseModel):
     entries: List[GeoEntry] = []
-    by_country: List[Dict[str, Any]] = []   # [{country, bytes}] sorted desc
+    by_country: List[Dict[str, Any]] = []
 
 
 # ── Beaconing ─────────────────────────────────────────────────────────────────
@@ -113,12 +113,73 @@ class BeaconFlow(BaseModel):
     dst_port: int
     connection_count: int
     avg_interval_sec: float
-    cv: float                      # coefficient of variation — lower = more regular
+    cv: float
     intervals: List[float] = []
 
 
 class BeaconMetrics(BaseModel):
     beacons: List[BeaconFlow] = []
+
+
+# ── Timeline event ────────────────────────────────────────────────────────────
+
+class TimelineEvent(BaseModel):
+    timestamp: float
+    time_offset_sec: float
+    category: str          # "security", "performance", "protocol", "rst", "beacon"
+    severity: str          # "critical", "warning", "info"
+    src_ip: Optional[str] = None
+    dst_ip: Optional[str] = None
+    detail: str
+    packet_number: Optional[int] = None
+
+
+class TimelineMetrics(BaseModel):
+    events: List[TimelineEvent] = []
+    start_time: Optional[float] = None
+
+
+# ── HTTP object extraction ─────────────────────────────────────────────────────
+
+class HTTPObject(BaseModel):
+    src_ip: str
+    dst_ip: str
+    src_port: int
+    dst_port: int
+    method: str
+    host: str
+    path: str
+    status_code: Optional[str] = None
+    content_type: Optional[str] = None
+    request_size: int = 0
+    response_size: int = 0
+    timestamp: Optional[float] = None
+
+
+class HTTPObjectMetrics(BaseModel):
+    objects: List[HTTPObject] = []
+    total_requests: int = 0
+    unique_hosts: List[str] = []
+
+
+# ── DNS map ───────────────────────────────────────────────────────────────────
+
+class DNSRecord(BaseModel):
+    query: str
+    query_type: str
+    responses: List[str] = []
+    client_ip: str
+    server_ip: str
+    latency_ms: Optional[float] = None
+    rcode: int = 0
+    timestamp: Optional[float] = None
+
+
+class DNSMapMetrics(BaseModel):
+    records: List[DNSRecord] = []
+    unique_domains: List[str] = []
+    nxdomain_count: int = 0
+    top_queried: List[Dict[str, Any]] = []
 
 
 # ── Comparison report ─────────────────────────────────────────────────────────
@@ -128,7 +189,7 @@ class MetricDiff(BaseModel):
     file1_value: Any
     file2_value: Any
     delta: Optional[float] = None
-    direction: str = "neutral"   # "improved", "degraded", "neutral"
+    direction: str = "neutral"
 
 
 class CompareReport(BaseModel):
@@ -149,33 +210,28 @@ class RSTEvidenceStep(BaseModel):
     dst_ip: str
     src_port: int
     dst_port: int
-    detail: str                  # human-readable description of this step
+    detail: str
 
 
 class RSTAnalysis(BaseModel):
-    # Identity
     rst_packet_number: int
     rst_timestamp: float
     src_ip: str
     dst_ip: str
     src_port: int
     dst_port: int
-    rst_sender: str              # "client", "server", or "third_party"
+    rst_sender: str
 
-    # Classification
-    root_cause: str              # short label, e.g. "Port closed / not listening"
-    root_cause_code: str         # machine-readable key
-    confidence: str              # "high", "medium", "low"
-    severity: str                # "critical", "warning", "info"
+    root_cause: str
+    root_cause_code: str
+    confidence: str
+    severity: str
 
-    # Explanation
-    explanation: str             # 1–2 sentence plain-English cause
-    recommendation: str          # what to do about it
+    explanation: str
+    recommendation: str
 
-    # Evidence chain — ordered list of packets that led to the RST
     evidence_chain: List[RSTEvidenceStep] = []
 
-    # Context metrics
     stream_duration_sec: Optional[float] = None
     idle_gap_before_rst_sec: Optional[float] = None
     bytes_exchanged: int = 0
@@ -188,7 +244,7 @@ class RSTAnalysis(BaseModel):
 class RSTForensicsMetrics(BaseModel):
     total_resets: int = 0
     classified: List[RSTAnalysis] = []
-    by_cause: Dict[str, int] = {}   # root_cause_code -> count
+    by_cause: Dict[str, int] = {}
 
 
 # ── History summary ────────────────────────────────────────────────────────────

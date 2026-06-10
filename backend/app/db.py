@@ -65,3 +65,10 @@ def delete_report(analysis_id: str) -> bool:
         cur = c.execute("DELETE FROM analyses WHERE id=?", (analysis_id,))
         c.commit()
     return cur.rowcount > 0
+
+
+def delete_all_reports() -> int:
+    with _conn() as c:
+        cur = c.execute("DELETE FROM analyses")
+        c.commit()
+    return cur.rowcount
