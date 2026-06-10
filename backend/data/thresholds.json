@@ -1,0 +1,26 @@
+{
+  "_comment": "Edit these values to tune detection thresholds without changing code. Restart the backend after editing.",
+  "performance": {
+    "retransmission_rate_warning": 2.0,
+    "high_handshake_ms": 200,
+    "high_delta_ms": 1000
+  },
+  "security": {
+    "port_scan_threshold": 20,
+    "exfil_bytes_threshold": 5000000,
+    "large_dns_payload": 512
+  },
+  "protocol": {
+    "high_dns_latency_ms": 500
+  },
+  "beacon": {
+    "min_connections": 5,
+    "max_cv": 0.3
+  },
+  "rst_forensics": {
+    "nat_idle_threshold_sec": 30.0
+  },
+  "engine": {
+    "max_packets": 500000
+  }
+}

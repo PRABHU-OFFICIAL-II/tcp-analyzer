@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Upload, ShieldCheck, Zap, Bug, Clock, GitCompare } from "lucide-react";
+import { Upload, ShieldCheck, Zap, Bug, Clock, GitCompare, Settings } from "lucide-react";
 
 const s = {
   page: { minHeight: "100vh", display: "flex", flexDirection: "column",
@@ -38,10 +38,10 @@ const s = {
 const features = [
   { icon: <Zap size={18} color="#facc15" />, label: "Performance" },
   { icon: <ShieldCheck size={18} color="#4ade80" />, label: "Security" },
-  { icon: <Bug size={18} color="#f87171" />, label: "Protocol" },
+  { icon: <Bug size={18} color="#f87171" />, label: "13 Analyzers" },
 ];
 
-export default function UploadPage({ onUpload, loading, error, onHistory, onCompare }) {
+export default function UploadPage({ onUpload, loading, error, onHistory, onCompare, onSettings }) {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -51,12 +51,13 @@ export default function UploadPage({ onUpload, loading, error, onHistory, onComp
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       <div style={s.hero}>
         <h1 style={s.title}>TCP <span style={s.accent}>Analyzer</span></h1>
-        <p style={s.subtitle}>Upload a PCAP file or capture live traffic for instant network analysis</p>
+        <p style={s.subtitle}>Upload a PCAP file for deep automated network analysis</p>
       </div>
 
       <div style={s.navRow}>
         <button style={s.navBtn} onClick={onHistory}><Clock size={14} /> History</button>
         <button style={s.navBtn} onClick={onCompare}><GitCompare size={14} /> Compare PCAPs</button>
+        <button style={s.navBtn} onClick={onSettings}><Settings size={14} /> Thresholds</button>
       </div>
 
       <div style={s.features}>
@@ -74,7 +75,7 @@ export default function UploadPage({ onUpload, loading, error, onHistory, onComp
       >
         <div style={s.uploadIcon}><Upload size={40} /></div>
         <p style={s.dropText}>{selectedFile ? selectedFile.name : "Drag & drop your PCAP file here"}</p>
-        <p style={s.dropHint}>Supports .pcap, .pcapng, .cap</p>
+        <p style={s.dropHint}>Supports .pcap, .pcapng, .cap &nbsp;·&nbsp; Up to 500k packets</p>
         <input ref={inputRef} type="file" accept=".pcap,.pcapng,.cap" style={{ display: "none" }}
           onChange={e => setSelectedFile(e.target.files[0])} />
       </div>

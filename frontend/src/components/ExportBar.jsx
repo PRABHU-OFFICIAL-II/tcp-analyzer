@@ -1,4 +1,4 @@
-import { Download, FileText, FileJson } from "lucide-react";
+import { Download, FileText, FileJson, Globe } from "lucide-react";
 
 const s = {
   bar: {
@@ -36,6 +36,9 @@ export default function ExportBar({ analysisId }) {
       </a>
       <a href={`${base}/json`} download style={s.btn("#60a5fa")}>
         <FileJson size={14} /> JSON
+      </a>
+      <a href={`${base}/html`} download style={s.btn("#f59e0b")}>
+        <Globe size={14} /> HTML
       </a>
     </div>
   );

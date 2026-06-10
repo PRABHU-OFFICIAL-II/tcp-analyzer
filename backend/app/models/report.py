@@ -16,15 +16,18 @@ class AnomalyEntry(BaseModel):
 class PerformanceMetrics(BaseModel):
     avg_handshake_ms: Optional[float] = None
     max_handshake_ms: Optional[float] = None
+    p95_handshake_ms: Optional[float] = None
     retransmission_count: int = 0
     retransmission_rate_pct: float = 0.0
     zero_window_count: int = 0
     avg_delta_ms: Optional[float] = None
     max_delta_ms: Optional[float] = None
+    p95_delta_ms: Optional[float] = None
     throughput_series: List[Dict[str, Any]] = []
     handshake_anomalies: List[AnomalyEntry] = []
     zero_window_events: List[AnomalyEntry] = []
     retransmission_events: List[AnomalyEntry] = []
+    slow_response_events: List[AnomalyEntry] = []
 
 
 class SecurityMetrics(BaseModel):
@@ -32,11 +35,13 @@ class SecurityMetrics(BaseModel):
     cleartext_credentials: List[AnomalyEntry] = []
     protocol_port_mismatches: List[AnomalyEntry] = []
     exfiltration_indicators: List[AnomalyEntry] = []
+    scanner_signatures: List[AnomalyEntry] = []
 
 
 class ProtocolMetrics(BaseModel):
     tls_failures: List[AnomalyEntry] = []
     dns_errors: List[AnomalyEntry] = []
+    icmp_errors: List[AnomalyEntry] = []
     http_error_rate_pct: float = 0.0
     http_status_counts: Dict[str, int] = {}
     connection_resets: List[AnomalyEntry] = []
@@ -61,7 +66,6 @@ class AnalysisReport(BaseModel):
     performance: PerformanceMetrics
     security: SecurityMetrics
     protocol: ProtocolMetrics
-    # Extended metrics — all Optional so older saved reports remain loadable
     flow: Optional[Any] = None
     fingerprint: Optional[Any] = None
     tls_deep: Optional[Any] = None
@@ -70,3 +74,6 @@ class AnalysisReport(BaseModel):
     geo: Optional[Any] = None
     beacons: Optional[Any] = None
     rst_forensics: Optional[Any] = None
+    timeline: Optional[Any] = None
+    http_objects: Optional[Any] = None
+    dns_map: Optional[Any] = None

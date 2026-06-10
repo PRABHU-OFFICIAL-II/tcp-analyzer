@@ -1,5 +1,5 @@
 import uuid
-from scapy.all import rdpcap
+from scapy.all import PcapReader
 from ..models.report import AnalysisReport, SummaryDiagnosis
 from .performance import analyze_performance
 from .security import analyze_security
@@ -12,18 +12,33 @@ from .ioc import analyze_ioc
 from .geo import analyze_geo
 from .beacon import analyze_beacon
 from .rst_forensics import analyze_rst_forensics
-from .. import db
+from .timeline import build_timeline
+from .http_objects import analyze_http_objects
+from .dns_map import analyze_dns_map
+from .. import db, thresholds
+
+
+def _load_packets(filepath: str) -> list:
+    """Stream-read PCAP respecting the configured packet limit."""
+    max_pkts = thresholds.get("engine", "max_packets") or 500_000
+    packets = []
+    with PcapReader(filepath) as reader:
+        for pkt in reader:
+            packets.append(pkt)
+            if len(packets) >= max_pkts:
+                break
+    return packets
 
 
 def run_analysis(filepath: str, filename: str, save: bool = True) -> AnalysisReport:
-    packets = rdpcap(filepath)
+    packets = _load_packets(filepath)
 
     if len(packets) == 0:
         raise ValueError("PCAP file contains no packets.")
 
     timestamps = [float(p.time) for p in packets]
     start_ts = min(timestamps)
-    end_ts = max(timestamps)
+    end_ts   = max(timestamps)
     duration = end_ts - start_ts
 
     unique_ips: set = set()
@@ -32,17 +47,20 @@ def run_analysis(filepath: str, filename: str, save: bool = True) -> AnalysisRep
             unique_ips.add(pkt["IP"].src)
             unique_ips.add(pkt["IP"].dst)
 
-    perf = analyze_performance(packets)
-    sec = analyze_security(packets)
-    proto = analyze_protocol(packets)
-    flow = analyze_flow(packets)
-    fingerprint = analyze_fingerprint(packets)
-    tls_deep = analyze_tls_deep(packets)
-    arp = analyze_arp(packets)
-    ioc = analyze_ioc(packets)
-    geo = analyze_geo(packets)
-    beacons = analyze_beacon(packets)
+    perf          = analyze_performance(packets)
+    sec           = analyze_security(packets)
+    proto         = analyze_protocol(packets)
+    flow          = analyze_flow(packets)
+    fingerprint   = analyze_fingerprint(packets)
+    tls_deep      = analyze_tls_deep(packets)
+    arp           = analyze_arp(packets)
+    ioc           = analyze_ioc(packets)
+    geo           = analyze_geo(packets)
+    beacons       = analyze_beacon(packets)
     rst_forensics = analyze_rst_forensics(packets)
+    http_objects  = analyze_http_objects(packets)
+    dns_map       = analyze_dns_map(packets)
+    timeline      = build_timeline(perf, sec, proto, arp, ioc, beacons, rst_forensics, start_ts)
 
     diagnoses = _build_diagnoses(perf, sec, proto, arp, ioc, beacons, tls_deep, rst_forensics)
 
@@ -65,6 +83,9 @@ def run_analysis(filepath: str, filename: str, save: bool = True) -> AnalysisRep
         geo=geo,
         beacons=beacons,
         rst_forensics=rst_forensics,
+        timeline=timeline,
+        http_objects=http_objects,
+        dns_map=dns_map,
     )
 
     if save:
@@ -82,11 +103,11 @@ def _build_diagnoses(perf, sec, proto, arp, ioc, beacons, tls_deep, rst_forensic
             severity="warning",
             details=[
                 f"{perf.zero_window_count} Zero Window events found.",
-                "The receiving host's buffer is full — indicates CPU or memory pressure on the server.",
+                "The receiving host's buffer is full — indicates CPU or memory pressure.",
             ]
         ))
 
-    if perf.retransmission_rate_pct > 2.0:
+    if perf.retransmission_rate_pct > thresholds.get("performance", "retransmission_rate_warning"):
         diagnoses.append(SummaryDiagnosis(
             headline=f"High packet loss detected ({perf.retransmission_rate_pct}% retransmission rate)",
             severity="critical",
@@ -102,18 +123,18 @@ def _build_diagnoses(perf, sec, proto, arp, ioc, beacons, tls_deep, rst_forensic
             details=[f"{perf.retransmission_count} retransmitted packets — within normal range."]
         ))
 
-    if perf.max_handshake_ms and perf.max_handshake_ms > 200:
+    if perf.max_handshake_ms and perf.max_handshake_ms > thresholds.get("performance", "high_handshake_ms"):
         diagnoses.append(SummaryDiagnosis(
             headline=f"High network latency (max handshake: {perf.max_handshake_ms} ms)",
             severity="warning",
-            details=[f"Average: {perf.avg_handshake_ms} ms, Max: {perf.max_handshake_ms} ms."]
+            details=[f"Avg: {perf.avg_handshake_ms} ms, P95: {perf.p95_handshake_ms} ms, Max: {perf.max_handshake_ms} ms."]
         ))
 
-    if perf.max_delta_ms and perf.max_delta_ms > 1000:
+    if perf.max_delta_ms and perf.max_delta_ms > thresholds.get("performance", "high_delta_ms"):
         diagnoses.append(SummaryDiagnosis(
             headline=f"Slow application response time (max: {perf.max_delta_ms} ms)",
             severity="warning",
-            details=[f"Average server response delta: {perf.avg_delta_ms} ms."]
+            details=[f"Avg: {perf.avg_delta_ms} ms, P95: {perf.p95_delta_ms} ms, Max: {perf.max_delta_ms} ms."]
         ))
 
     if sec.cleartext_credentials:
@@ -128,6 +149,13 @@ def _build_diagnoses(perf, sec, proto, arp, ioc, beacons, tls_deep, rst_forensic
             headline=f"Port scanning from {len(sec.port_scan_sources)} source(s)",
             severity="critical",
             details=[f"Source(s): {', '.join(e.src_ip for e in sec.port_scan_sources)}"]
+        ))
+
+    if sec.scanner_signatures:
+        diagnoses.append(SummaryDiagnosis(
+            headline=f"Scanner tool signatures detected ({len(sec.scanner_signatures)} instance(s))",
+            severity="critical",
+            details=[e.detail for e in sec.scanner_signatures[:5]]
         ))
 
     if sec.exfiltration_indicators:
@@ -163,7 +191,8 @@ def _build_diagnoses(perf, sec, proto, arp, ioc, beacons, tls_deep, rst_forensic
             headline=f"Beaconing / C2 activity detected ({len(beacons.beacons)} flow(s))",
             severity="critical",
             details=[
-                f"{b.src_ip} → {b.dst_ip}:{b.dst_port} — {b.connection_count} connections, avg interval {b.avg_interval_sec}s, CV={b.cv}"
+                f"{b.src_ip} → {b.dst_ip}:{b.dst_port} — {b.connection_count} connections, "
+                f"avg interval {b.avg_interval_sec}s, CV={b.cv}"
                 for b in beacons.beacons[:5]
             ]
         ))
@@ -209,11 +238,18 @@ def _build_diagnoses(perf, sec, proto, arp, ioc, beacons, tls_deep, rst_forensic
             severity="warning",
             details=[
                 f"{sum(1 for e in proto.dns_errors if 'NXDOMAIN' in e.detail)} NXDOMAIN, "
-                f"{sum(1 for e in proto.dns_errors if 'Slow' in e.detail)} slow resolutions."
+                f"{sum(1 for e in proto.dns_errors if 'Slow' in e.detail)} slow resolutions, "
+                f"{sum(1 for e in proto.dns_errors if 'SERVFAIL' in e.detail)} SERVFAIL."
             ]
         ))
 
-    # RST forensics summary — group by root cause
+    if proto.icmp_errors:
+        diagnoses.append(SummaryDiagnosis(
+            headline=f"ICMP error messages ({len(proto.icmp_errors)} event(s))",
+            severity="warning",
+            details=[e.detail for e in proto.icmp_errors[:5]]
+        ))
+
     if rst_forensics and rst_forensics.total_resets > 0:
         critical_codes = {"MIDDLEBOX_INJECTION", "TLS_REJECTION", "RESOURCE_EXHAUSTION", "APP_CRASH"}
         sev = "critical" if any(c in rst_forensics.by_cause for c in critical_codes) else "warning"
@@ -225,7 +261,7 @@ def _build_diagnoses(perf, sec, proto, arp, ioc, beacons, tls_deep, rst_forensic
             headline=f"TCP Reset forensics: {rst_forensics.total_resets} stream(s) terminated with RST",
             severity=sev,
             details=[
-                f"Root causes identified: {cause_summary}.",
+                f"Root causes: {cause_summary}.",
                 "See the RST Forensics tab for a full evidence chain per reset.",
             ]
         ))

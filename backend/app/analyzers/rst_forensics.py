@@ -23,8 +23,9 @@ from collections import defaultdict
 from ..models.extended_report import (
     RSTForensicsMetrics, RSTAnalysis, RSTEvidenceStep,
 )
+from .. import thresholds
 
-NAT_IDLE_THRESHOLD_SEC = 30.0
+NAT_IDLE_THRESHOLD_SEC = None  # loaded at call time
 HTTP_STATUS_RE = re.compile(rb"HTTP/\d\.\d (\d{3})")
 
 # ── Root cause catalogue ───────────────────────────────────────────────────────
@@ -161,6 +162,8 @@ def _has_flag(flags, name: str) -> bool:
 # ── Main analyzer ──────────────────────────────────────────────────────────────
 
 def analyze_rst_forensics(packets) -> RSTForensicsMetrics:
+    global NAT_IDLE_THRESHOLD_SEC
+    NAT_IDLE_THRESHOLD_SEC = thresholds.get("rst_forensics", "nat_idle_threshold_sec")
     # Index all packets by their canonical stream key
     # Canonical key: (min_ip, max_ip, min_port, max_port) so both directions match
     stream_index: dict = defaultdict(list)  # canon_key -> [(pkt_num, pkt)]
