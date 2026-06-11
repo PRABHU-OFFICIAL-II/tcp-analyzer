@@ -1,7 +1,6 @@
 {
-  "_comment": "Edit these values to tune detection thresholds without changing code. Restart the backend after editing.",
   "performance": {
-    "retransmission_rate_warning": 2.0,
+    "retransmission_rate_warning": 2,
     "high_handshake_ms": 200,
     "high_delta_ms": 1000
   },
@@ -18,7 +17,7 @@
     "max_cv": 0.3
   },
   "rst_forensics": {
-    "nat_idle_threshold_sec": 30.0
+    "nat_idle_threshold_sec": 30
   },
   "engine": {
     "max_packets": 500000
