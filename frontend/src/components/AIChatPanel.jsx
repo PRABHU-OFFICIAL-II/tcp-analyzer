@@ -1,5 +1,121 @@
 import { useState, useRef, useEffect } from "react";
 
+function MarkdownMessage({ content }) {
+  const lines = content.split("\n");
+  const elements = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // H3
+    if (line.startsWith("### ")) {
+      elements.push(
+        <div key={i} style={{ fontSize: "0.82rem", fontWeight: 700, color: "#a5b4fc",
+          marginTop: "1rem", marginBottom: "0.35rem", borderBottom: "1px solid rgba(99,102,241,0.2)",
+          paddingBottom: "0.25rem" }}>
+          {renderInline(line.slice(4))}
+        </div>
+      );
+      i++; continue;
+    }
+    // H2
+    if (line.startsWith("## ")) {
+      elements.push(
+        <div key={i} style={{ fontSize: "0.875rem", fontWeight: 700, color: "#c4b5fd",
+          marginTop: "1.1rem", marginBottom: "0.4rem", borderBottom: "1px solid rgba(139,92,246,0.3)",
+          paddingBottom: "0.3rem" }}>
+          {renderInline(line.slice(3))}
+        </div>
+      );
+      i++; continue;
+    }
+    // H1
+    if (line.startsWith("# ")) {
+      elements.push(
+        <div key={i} style={{ fontSize: "0.95rem", fontWeight: 700, color: "#e2e8f0",
+          marginTop: "1.2rem", marginBottom: "0.5rem" }}>
+          {renderInline(line.slice(2))}
+        </div>
+      );
+      i++; continue;
+    }
+    // Bullet list item (- or *)
+    if (/^[\*\-]\s/.test(line)) {
+      const listItems = [];
+      while (i < lines.length && /^[\*\-]\s/.test(lines[i])) {
+        listItems.push(
+          <li key={i} style={{ marginBottom: "0.3rem", lineHeight: 1.55 }}>
+            {renderInline(lines[i].slice(2))}
+          </li>
+        );
+        i++;
+      }
+      elements.push(
+        <ul key={`ul-${i}`} style={{ paddingLeft: "1.25rem", margin: "0.35rem 0", listStyleType: "disc" }}>
+          {listItems}
+        </ul>
+      );
+      continue;
+    }
+    // Numbered list
+    if (/^\d+\.\s/.test(line)) {
+      const listItems = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+        const text = lines[i].replace(/^\d+\.\s/, "");
+        listItems.push(
+          <li key={i} style={{ marginBottom: "0.3rem", lineHeight: 1.55 }}>
+            {renderInline(text)}
+          </li>
+        );
+        i++;
+      }
+      elements.push(
+        <ol key={`ol-${i}`} style={{ paddingLeft: "1.25rem", margin: "0.35rem 0" }}>
+          {listItems}
+        </ol>
+      );
+      continue;
+    }
+    // Horizontal rule
+    if (/^---+$/.test(line.trim())) {
+      elements.push(<hr key={i} style={{ border: "none", borderTop: "1px solid #2d3148", margin: "0.75rem 0" }} />);
+      i++; continue;
+    }
+    // Empty line → spacer
+    if (line.trim() === "") {
+      elements.push(<div key={i} style={{ height: "0.4rem" }} />);
+      i++; continue;
+    }
+    // Regular paragraph
+    elements.push(
+      <div key={i} style={{ lineHeight: 1.6, marginBottom: "0.1rem" }}>
+        {renderInline(line)}
+      </div>
+    );
+    i++;
+  }
+
+  return <div style={{ fontSize: "0.825rem", color: "#e2e8f0" }}>{elements}</div>;
+}
+
+function renderInline(text) {
+  // Split on **bold**, *italic*, and `code` markers
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith("**") && part.endsWith("**"))
+      return <strong key={idx} style={{ color: "#f1f5f9", fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("*") && part.endsWith("*"))
+      return <em key={idx} style={{ color: "#cbd5e1" }}>{part.slice(1, -1)}</em>;
+    if (part.startsWith("`") && part.endsWith("`"))
+      return <code key={idx} style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc",
+        padding: "0.1rem 0.35rem", borderRadius: "4px", fontSize: "0.78rem", fontFamily: "monospace" }}>
+        {part.slice(1, -1)}
+      </code>;
+    return part;
+  });
+}
+
 const PPP_AVATAR = "https://ca.slack-edge.com/E7T5PNK3P-U0AGF1FVD1P-5424c1ea1a50-512";
 
 const CAPTURE_REASONS = [
@@ -347,7 +463,11 @@ export default function AIChatPanel({ report }) {
                       ) : (
                         <div style={s.userAvatar}>You</div>
                       )}
-                      <div style={s.bubble(m.role)}>{m.content}</div>
+                      <div style={s.bubble(m.role)}>
+                        {m.role === "assistant"
+                          ? <MarkdownMessage content={m.content} />
+                          : m.content}
+                      </div>
                     </div>
                   ))}
 

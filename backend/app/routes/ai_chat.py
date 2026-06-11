@@ -6,7 +6,7 @@ from typing import Any
 
 router = APIRouter()
 
-MODEL_ID = "google/gemma-4-12b-it"
+MODEL_ID = r"C:\Users\ppenthoi\.cache\huggingface\hub\models--google--gemma-4-12b-it\snapshots\5926caa4ec0cac5cbfadaf4077420520de1d5205"
 
 # Smoke-test imports at startup so errors surface immediately in server logs.
 try:
@@ -240,8 +240,25 @@ def _run_inference(processor, model, conversation: list[dict]) -> str:
         )
 
     raw = processor.decode(outputs[0][input_len:], skip_special_tokens=False)
-    parsed = processor.parse_response(raw)
-    return parsed if isinstance(parsed, str) else str(parsed)
+
+    # parse_response can return a dict {'content': '...', 'role': '...'} or a plain string
+    try:
+        parsed = processor.parse_response(raw)
+        if isinstance(parsed, dict):
+            text = parsed.get("content") or parsed.get("text") or ""
+        elif isinstance(parsed, str):
+            text = parsed
+        else:
+            text = str(parsed)
+    except Exception:
+        # Fallback: decode directly and strip known special tokens
+        text = processor.decode(outputs[0][input_len:], skip_special_tokens=True)
+
+    # Strip any residual special tokens that may appear in the text
+    for token in ["<end_of_turn>", "<start_of_turn>", "<eos>", "<bos>", "<pad>"]:
+        text = text.replace(token, "")
+
+    return text.strip()
 
 
 @router.post("/chat", response_model=ChatResponse)
