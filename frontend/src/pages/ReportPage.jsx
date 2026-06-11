@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import DiagnosisCard from "../components/DiagnosisCard.jsx";
 import AnomalyTable from "../components/AnomalyTable.jsx";
+import AIChatPanel from "../components/AIChatPanel.jsx";
 import StatCard from "../components/StatCard.jsx";
 import ThroughputChart from "../components/ThroughputChart.jsx";
 import ExportBar from "../components/ExportBar.jsx";
@@ -95,6 +96,8 @@ export default function ReportPage({ report, onReset }) {
       {tab === "geo"         && <GeoTab geo={report.geo} />}
       {tab === "beacons"     && <BeaconsTab beacons={report.beacons} />}
       {tab === "rst"         && <RSTForensicsTab metrics={report.rst_forensics} />}
+
+      <AIChatPanel report={report} />
     </div>
   );
 }
