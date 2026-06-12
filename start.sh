@@ -1,33 +1,38 @@
 #!/usr/bin/env bash
 set -e
 
-echo "=== TCP Analyzer ==="
+echo "=== TCP Analyzer (dev mode) ==="
 
-# Backend
+# ── Backend ──────────────────────────────────────────────────────────────────
 echo "[1/2] Starting backend..."
 cd backend
+
 if [ ! -d ".venv" ]; then
-  python -m venv .venv
-  .venv/Scripts/activate 2>/dev/null || source .venv/bin/activate
-  pip install -r requirements.txt
-else
-  .venv/Scripts/activate 2>/dev/null || source .venv/bin/activate
+    echo "[backend] venv not found — run ./setup.sh first."
+    exit 1
 fi
+
+source .venv/bin/activate
 uvicorn app.main:app --reload --port 8000 &
 BACKEND_PID=$!
+deactivate
 
-# Frontend
+# ── Frontend ─────────────────────────────────────────────────────────────────
 echo "[2/2] Starting frontend..."
 cd ../frontend
+
 if [ ! -d "node_modules" ]; then
-  npm install
+    echo "[frontend] node_modules not found — run ./setup.sh first."
+    kill $BACKEND_PID 2>/dev/null
+    exit 1
 fi
+
 npm run dev &
 FRONTEND_PID=$!
 
 echo ""
-echo "  Backend:  http://localhost:8000"
-echo "  Frontend: http://localhost:5173"
+echo "  Backend  : http://localhost:8000"
+echo "  Frontend : http://localhost:5173"
 echo ""
 echo "Press Ctrl+C to stop both servers."
 
