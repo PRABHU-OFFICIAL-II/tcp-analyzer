@@ -1,268 +1,260 @@
 ---
-  Step 1 — Install system dependencies on the VM
+  Phase 1 — Check the current state of the VM
 
-  sudo apt update && sudo apt upgrade -y
+  1.1 — Check OS version
+  cat /etc/os-release
 
-  # Python 3.11+
-  sudo apt install -y python3.11 python3.11-venv python3.11-dev python3-pip
+  1.2 — Check Python availability
+  python3 --version; python3.11 --version 2>/dev/null || echo "python3.11 not found"
 
-  # Node.js 20 (LTS)
-  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-  sudo apt install -y nodejs
+  1.3 — Check Node.js
+  node --version 2>/dev/null || echo "node not found"
 
-  # Scapy needs libpcap + tshark
-  sudo apt install -y libpcap-dev tcpdump
+  1.4 — Check disk space
+  df -h
 
-  # nginx (for serving the built frontend)
-  sudo apt install -y nginx
-
-  # Optional: git if you're cloning instead of copying
-  sudo apt install -y git rsync
+  1.5 — Check SELinux status
+  getenforce
 
   ---
-  Step 2 — Transfer the project to the VM
+  Phase 2 — Install system dependencies
 
-  Option A — rsync from your Windows machine (from PowerShell/WSL):
-  rsync -av --exclude='.venv' --exclude='node_modules' --exclude='__pycache__' \
+  2.1 — Update the system
+  sudo dnf update -y
+
+  2.2 — Install Python 3.11
+  sudo dnf install -y python3.11 python3.11-devel python3-pip
+
+  2.3 — Install libpcap and tcpdump
+  sudo dnf install -y libpcap-devel tcpdump
+
+  2.4 — Add NodeSource RPM repo
+  curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+
+  2.5 — Install Node.js
+  sudo dnf install -y nodejs
+
+  2.6 — Install nginx
+  sudo dnf install -y nginx
+
+  2.7 — Install utilities
+  sudo dnf install -y git rsync zip unzip
+
+  2.8 — Verify all installs
+  python3.11 --version && node --version && npm --version && nginx -v
+
+  ---
+  Phase 3 — Transfer the project
+
+  3.1 — Create the app directory
+  sudo mkdir -p /opt/tcp-analyzer
+  sudo chown $USER:$USER /opt/tcp-analyzer
+
+  3.2 — Transfer from Windows (run this on your Windows machine in WSL or Git Bash)
+  rsync -av --progress \
+    --exclude='.venv' \
+    --exclude='node_modules' \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
     /mnt/c/Users/ppenthoi/Documents/DEV/tcp-analyzer/ \
-    user@your-vm-ip:/opt/tcp-analyzer/
+    root@YOUR_VM_IP:/opt/tcp-analyzer/
 
-  Option B — zip and scp:
-  # On Windows (in WSL or Git Bash), zip excluding venv/node_modules
-  zip -r tcp-analyzer.zip . -x ".venv/*" -x "node_modules/*" -x "__pycache__/*"
-  scp tcp-analyzer.zip user@your-vm-ip:/opt/
-  # On VM:
-  cd /opt && unzip tcp-analyzer.zip -d tcp-analyzer
+  3.3 — Confirm files arrived on VM
+  ls -la /opt/tcp-analyzer/
+  ls -la /opt/tcp-analyzer/backend/
+  ls -la /opt/tcp-analyzer/frontend/
 
   ---
-  Step 3 — Copy the Gemma model to the VM
+  Phase 4 — Transfer the Gemma model
 
-  The model folder on your Windows machine is:
-  C:\Users\ppenthoi\.cache\huggingface\hub\models--google--gemma-4-12b-it\
+  4.1 — Create the model directory on the VM
+  sudo mkdir -p /opt/models
+  sudo chown $USER:$USER /opt/models
 
-  Copy it to the VM:
-  # From Windows (WSL or Git Bash):
+  4.2 — Transfer the model (run on your Windows machine in WSL or Git Bash — this will take a while)
   rsync -av --progress \
     "/mnt/c/Users/ppenthoi/.cache/huggingface/hub/models--google--gemma-4-12b-it/" \
-    user@your-vm-ip:/opt/models/gemma-4-12b-it/
+    root@YOUR_VM_IP:/opt/models/gemma-4-12b-it/
 
-  This transfers the entire model directory (including the snapshots/ folder) to /opt/models/gemma-4-12b-it/ on the VM.
-
-  ---
-  Step 4 — Update the model path in ai_chat.py
-
-  On the VM, edit backend/app/routes/ai_chat.py line 9:
-
-  nano /opt/tcp-analyzer/backend/app/routes/ai_chat.py
-
-  Change:
-  # OLD (Windows path)
-  MODEL_ID = r"C:\Users\ppenthoi\.cache\huggingface\hub\models--google--gemma-4-12b-it\snapshots\5926caa4ec0cac5cbfadaf4077420520de1d5205"
-  To:
-  # NEW (Linux path — point to the snapshots subfolder)
-  MODEL_ID = "/opt/models/gemma-4-12b-it/snapshots/5926caa4ec0cac5cbfadaf4077420520de1d5205"
-
-  ▎ Important: keep the snapshot hash at the end — that's the exact model version folder. Verify it exists with ls /opt/models/gemma-4-12b-it/snapshots/.
+  4.3 — Verify the model snapshot folder exists on the VM
+  ls /opt/models/gemma-4-12b-it/snapshots/
 
   ---
-  Step 5 — Update CORS for your VM's IP
+  Phase 5 — Update the model path in the code
 
-  Edit backend/app/main.py and add your VM's IP/domain to the allowed origins:
+  5.1 — Check the current MODEL_ID line
+  grep -n "MODEL_ID" /opt/tcp-analyzer/backend/app/routes/ai_chat.py
 
-  nano /opt/tcp-analyzer/backend/app/main.py
+  5.2 — Replace the Windows path with the Linux path (copy the snapshot hash from Phase 4.3 output)
+  sed -i 's|MODEL_ID = r"C:\\.*"|MODEL_ID = "/opt/models/gemma-4-12b-it/snapshots/5926caa4ec0cac5cbfadaf4077420520de1d5205"|' \
+    /opt/tcp-analyzer/backend/app/routes/ai_chat.py
 
-  Change:
-  allow_origins=["http://localhost:5173", "http://localhost:3000"],
-  To:
-  allow_origins=[
-      "http://localhost:5173",
-      "http://localhost:3000",
-      "http://YOUR_VM_IP",          # e.g. http://192.168.1.50
-      "http://YOUR_VM_IP:80",
-  ],
+  5.3 — Confirm the change
+  grep -n "MODEL_ID" /opt/tcp-analyzer/backend/app/routes/ai_chat.py
 
   ---
-  Step 6 — Create Python venv and install dependencies
+  Phase 6 — Set up Python virtual environment
 
+  6.1 — Create the venv
   cd /opt/tcp-analyzer/backend
-
-  # Create venv with Python 3.11
   python3.11 -m venv .venv
 
-  # Activate it
-  source .venv/bin/activate
+  6.2 — Activate it
+  source /opt/tcp-analyzer/backend/.venv/bin/activate
 
-  # Upgrade pip first
+  6.3 — Upgrade pip
   pip install --upgrade pip
 
-  # Install all dependencies
-  # If you have NO GPU (CPU only):
+  6.4 — Install PyTorch (CPU)
   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-  pip install -r requirements.txt
 
-  # If you HAVE a CUDA GPU (faster inference):
-  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-  pip install -r requirements.txt
+  6.5 — Install the rest of the requirements
+  pip install -r /opt/tcp-analyzer/backend/requirements.txt
 
+  6.6 — Verify key packages loaded
+  python -c "import fastapi, uvicorn, scapy, transformers, torch; print('All OK')"
+
+  6.7 — Deactivate
   deactivate
 
-  ▎ torch is ~2GB so this takes a while. The --index-url trick installs the right torch variant for your hardware.
-
   ---
-  Step 7 — Build the frontend (static files)
+  Phase 7 — Build the frontend
 
-  cd /opt/tcp-analyzer/frontend
+  7.1 — Install npm dependencies
+  cd /opt/tcp-analyzer/frontend && npm install
 
-  # Install npm dependencies
-  npm install
-
-  # Build production static files → creates frontend/dist/
+  7.2 — Build production static files
   npm run build
 
-  This produces /opt/tcp-analyzer/frontend/dist/ — a folder of plain HTML/CSS/JS.
+  7.3 — Confirm dist folder was created
+  ls -la /opt/tcp-analyzer/frontend/dist/
 
   ---
-  Step 8 — Create the systemd service for the backend
+  Phase 8 — Create the systemd service
 
-  sudo nano /etc/systemd/system/tcp-analyzer-backend.service
+  8.1 — Create the service file (replace root with your actual Linux username if different)
+  sudo tee /etc/systemd/system/tcp-analyzer-backend.service > /dev/null <<'EOF'
+[Unit]
+Description=TCP Analyzer Backend (FastAPI + Uvicorn)
+After=network.target
 
-  Paste this (replace your_linux_user with your actual username, e.g. ubuntu):
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/tcp-analyzer/backend
+ExecStart=/opt/tcp-analyzer/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+Environment=CORS_ORIGINS=http://YOUR_VM_IP
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=65536
 
-  [Unit]
-  Description=TCP Analyzer Backend (FastAPI + Uvicorn)
-  After=network.target
+[Install]
+WantedBy=multi-user.target
+EOF
 
-  [Service]
-  Type=simple
-  User=your_linux_user
-  WorkingDirectory=/opt/tcp-analyzer/backend
-  ExecStart=/opt/tcp-analyzer/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
-  Restart=always
-  RestartSec=5
-  StandardOutput=journal
-  StandardError=journal
-
-  # Increase memory limits for the large model (12GB model needs headroom)
-  LimitNOFILE=65536
-
-  [Install]
-  WantedBy=multi-user.target
-
-  Enable and start it:
+  8.2 — Reload systemd
   sudo systemctl daemon-reload
+
+  8.3 — Enable the service
   sudo systemctl enable tcp-analyzer-backend
+
+  8.4 — Start the service
   sudo systemctl start tcp-analyzer-backend
 
-  # Check it's running
+  8.5 — Check the status
   sudo systemctl status tcp-analyzer-backend
 
-  # Watch logs live
-  sudo journalctl -u tcp-analyzer-backend -f
+  8.6 — Check the logs
+  sudo journalctl -u tcp-analyzer-backend -n 50 --no-pager
 
   ---
-  Step 9 — Configure nginx to serve the frontend + proxy the API
+  Phase 9 — Configure nginx
 
-  sudo nano /etc/nginx/sites-available/tcp-analyzer
-
-  Paste:
+  9.1 — Write the nginx config (replace YOUR_VM_IP)
+  sudo tee /etc/nginx/conf.d/tcp-analyzer.conf > /dev/null <<'EOF'
   server {
       listen 80;
-      server_name YOUR_VM_IP;   # replace with your VM's IP or hostname
+      server_name YOUR_VM_IP;
 
-      # Serve built React frontend
       root /opt/tcp-analyzer/frontend/dist;
       index index.html;
 
-      # All non-API routes → React's index.html (client-side routing)
       location / {
           try_files $uri $uri/ /index.html;
       }
 
-      # Proxy API calls to the FastAPI backend
       location /api/ {
           proxy_pass http://127.0.0.1:8000;
           proxy_set_header Host $host;
           proxy_set_header X-Real-IP $remote_addr;
           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-
-          # Allow large pcap file uploads (adjust as needed)
           client_max_body_size 500M;
-
-          # Longer timeout for AI inference (Gemma can take 30-60s)
-          proxy_read_timeout 300s;
-          proxy_connect_timeout 10s;
-          proxy_send_timeout 300s;
+          proxy_read_timeout    300s;
+          proxy_connect_timeout  10s;
+          proxy_send_timeout    300s;
       }
   }
+  EOF
 
-  Enable the config:
-  # Enable the site
-  sudo ln -s /etc/nginx/sites-available/tcp-analyzer /etc/nginx/sites-enabled/
-
-  # Remove the default site if present
-  sudo rm -f /etc/nginx/sites-enabled/default
-
-  # Test config is valid
+  9.2 — Test the nginx config
   sudo nginx -t
 
-  # Restart nginx
-  sudo systemctl restart nginx
+  ---
+  Phase 10 — SELinux configuration
+
+  10.1 — Allow nginx to proxy to the backend
+  sudo setsebool -P httpd_can_network_connect 1
+
+  10.2 — Label the frontend dist folder
+  sudo chcon -Rt httpd_sys_content_t /opt/tcp-analyzer/frontend/dist/
+
+  10.3 — Confirm the boolean was set
+  getsebool httpd_can_network_connect
+
+  ---
+  Phase 11 — Start nginx
+
+  11.1 — Enable nginx
   sudo systemctl enable nginx
 
-  ---
-  Step 10 — Set correct file permissions
+  11.2 — Start nginx
+  sudo systemctl restart nginx
 
-  # Make sure the app user owns the project directory
-  sudo chown -R your_linux_user:your_linux_user /opt/tcp-analyzer
-
-  # The data/ directory (SQLite db) is auto-created but make sure it's writable
-  mkdir -p /opt/tcp-analyzer/backend/data
-  chmod 755 /opt/tcp-analyzer/backend/data
+  11.3 — Check nginx status
+  sudo systemctl status nginx
 
   ---
-  Step 11 — Open the firewall port
+  Phase 12 — Firewall
 
-  # Allow HTTP traffic
-  sudo ufw allow 80/tcp
-  sudo ufw allow 22/tcp   # SSH (keep this or you'll lock yourself out)
-  sudo ufw enable
-  sudo ufw status
+  12.1 — Enable firewalld
+  sudo systemctl enable firewalld && sudo systemctl start firewalld
 
-  ---
-  Verification checklist
+  12.2 — Open HTTP and SSH
+  sudo firewall-cmd --permanent --add-service=http
+  sudo firewall-cmd --permanent --add-service=ssh
 
-  # 1. Backend health check
-  curl http://localhost:8000/api/health
-  # Expected: {"status":"ok"}
+  12.3 — Reload firewall
+  sudo firewall-cmd --reload
 
-  # 2. nginx serving frontend
-  curl -I http://YOUR_VM_IP
-  # Expected: HTTP/1.1 200 OK
-
-  # 3. API through nginx
-  curl http://YOUR_VM_IP/api/health
-  # Expected: {"status":"ok"}
-
-  # 4. Backend logs (watch for model load on first AI chat request)
-  sudo journalctl -u tcp-analyzer-backend -f
+  12.4 — Verify open services
+  sudo firewall-cmd --list-all
 
   ---
-  Important notes on the Gemma model
+  Phase 13 — Final verification
 
-  1. RAM requirement: Gemma 4 12B needs ~24GB RAM (CPU) or ~12GB VRAM (GPU). Make sure your VM has enough memory.
-  2. First request is slow: The model loads on the first /api/chat call — this can take 2-5 minutes. Subsequent requests are fast since the model stays in memory.
-  3. The snapshot path must be exact: Verify with ls /opt/models/gemma-4-12b-it/snapshots/ and use that exact hash in MODEL_ID.
-  4. CPU vs GPU: With no GPU, inference on Gemma 12B is slow (~1-3 min per response). If your VM has an NVIDIA GPU, install the CUDA torch variant in Step 6 and it will be used automatically via
-  device_map="auto".
+  13.1 — Health check from the VM itself
+  curl -s http://localhost:8000/api/health
+
+  13.2 — Frontend through nginx
+  curl -I http://localhost
+
+  13.3 — API through nginx
+  curl -s http://localhost/api/health
+
+  13.4 — From outside (run on your Windows machine)
+  curl -s http://YOUR_VM_IP/api/health
 
   ---
-  After any code changes — redeploy steps
-
-  # Backend change → restart service
-  sudo systemctl restart tcp-analyzer-backend
-
-  # Frontend change → rebuild and nginx picks it up automatically
-  cd /opt/tcp-analyzer/frontend && npm run build
-  # nginx serves from dist/ directly, no restart needed
-
-  That's everything. Access the app at http://YOUR_VM_IP once all services are running.
+  Start from Phase 1 and paste the output after each phase — I'll check it before telling you to proceed to the next one.

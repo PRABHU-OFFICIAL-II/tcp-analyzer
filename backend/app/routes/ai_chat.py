@@ -1,19 +1,9 @@
-import asyncio
-import traceback
+import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Any
 
 router = APIRouter()
-
-MODEL_ID = r"C:\Users\ppenthoi\.cache\huggingface\hub\models--google--gemma-4-12b-it\snapshots\5926caa4ec0cac5cbfadaf4077420520de1d5205"
-
-# Smoke-test imports at startup so errors surface immediately in server logs.
-try:
-    from transformers import AutoProcessor, AutoModelForCausalLM, Gemma4UnifiedProcessor  # noqa: F401
-    print(f"[ai_chat] transformers imports OK — Gemma4UnifiedProcessor found")
-except Exception as _e:
-    print(f"[ai_chat] WARNING: transformers import check failed: {_e}")
 
 SYSTEM_PROMPT = """You are an expert network engineer and security analyst specializing in TCP/IP packet capture analysis.
 
@@ -52,60 +42,6 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
-
-
-# Module-level singletons — loaded once on first request, reused for all subsequent calls.
-_model = None
-_processor = None
-_load_lock = asyncio.Lock()
-
-
-async def _get_model():
-    global _model, _processor
-    async with _load_lock:
-        if _model is not None:
-            return _processor, _model
-        try:
-            import torch
-            from transformers import AutoProcessor, AutoModelForCausalLM
-        except ImportError:
-            raise HTTPException(
-                status_code=500,
-                detail="Missing packages. Run: pip install -U transformers torch torchvision accelerate huggingface_hub pillow"
-            )
-
-        loop = asyncio.get_event_loop()
-
-        def _load():
-            proc = AutoProcessor.from_pretrained(MODEL_ID, trust_remote_code=True)
-            mdl = AutoModelForCausalLM.from_pretrained(
-                MODEL_ID,
-                dtype="auto",
-                device_map="auto",
-                trust_remote_code=True,
-            )
-            mdl.eval()
-            return proc, mdl
-
-        try:
-            _processor, _model = await loop.run_in_executor(None, _load)
-        except HTTPException:
-            raise
-        except Exception as e:
-            err = str(e)
-            tb = traceback.format_exc()
-            if "401" in err or "gated" in err.lower() or "access" in err.lower():
-                raise HTTPException(
-                    status_code=500,
-                    detail=(
-                        "HuggingFace access denied for google/gemma-4-12b-it. "
-                        "Accept the license at huggingface.co/google/gemma-4-12b-it, "
-                        "then run: huggingface-cli login"
-                    )
-                )
-            raise HTTPException(status_code=500, detail=f"Model load failed: {err}\n\nFull traceback:\n{tb}")
-
-    return _processor, _model
 
 
 def _build_report_summary(report: dict) -> str:
@@ -215,55 +151,24 @@ def _build_report_summary(report: dict) -> str:
     return "\n".join(lines)
 
 
-def _run_inference(processor, model, conversation: list[dict]) -> str:
-    import torch
-
-    inputs = processor.apply_chat_template(
-        conversation,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt",
-        add_generation_prompt=True,
-        enable_thinking=False,
-    ).to(model.device)
-
-    input_len = inputs["input_ids"].shape[-1]
-
-    with torch.inference_mode():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=2048,
-            temperature=1.0,
-            top_p=0.95,
-            top_k=64,
-            do_sample=True,
-        )
-
-    raw = processor.decode(outputs[0][input_len:], skip_special_tokens=False)
-
-    # parse_response can return a dict {'content': '...', 'role': '...'} or a plain string
-    try:
-        parsed = processor.parse_response(raw)
-        if isinstance(parsed, dict):
-            text = parsed.get("content") or parsed.get("text") or ""
-        elif isinstance(parsed, str):
-            text = parsed
-        else:
-            text = str(parsed)
-    except Exception:
-        # Fallback: decode directly and strip known special tokens
-        text = processor.decode(outputs[0][input_len:], skip_special_tokens=True)
-
-    # Strip any residual special tokens that may appear in the text
-    for token in ["<end_of_turn>", "<start_of_turn>", "<eos>", "<bos>", "<pad>"]:
-        text = text.replace(token, "")
-
-    return text.strip()
-
-
 @router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    processor, model = await _get_model()
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="ANTHROPIC_API_KEY is not set. Add it to the systemd service environment."
+        )
+
+    try:
+        import anthropic
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="anthropic package not installed. Run: pip install anthropic"
+        )
+
+    client = anthropic.AsyncAnthropic(api_key=api_key)
 
     report_summary = _build_report_summary(req.report)
     context_block = (
@@ -271,11 +176,7 @@ async def chat(req: ChatRequest):
         f"{report_summary}"
     )
 
-    # Build conversation in Gemma 4 chat format.
-    # Seed with the report context as the first user turn + a primed assistant reply,
-    # then append the actual user messages.
-    conversation = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+    messages = [
         {
             "role": "user",
             "content": (
@@ -296,17 +197,27 @@ async def chat(req: ChatRequest):
     ]
 
     for msg in req.messages:
-        # Skip the seeded assistant opening if it appears in the message history
         if msg.role == "assistant" and "I've reviewed the TCP dump" in msg.content:
             continue
-        conversation.append({"role": msg.role, "content": msg.content})
+        messages.append({"role": msg.role, "content": msg.content})
 
-    loop = asyncio.get_event_loop()
     try:
-        response_text = await loop.run_in_executor(
-            None, _run_inference, processor, model, conversation
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Inference error: {e}")
+        async with client.messages.stream(
+            model="claude-opus-4-8",
+            max_tokens=8192,
+            system=SYSTEM_PROMPT,
+            thinking={"type": "adaptive"},
+            messages=messages,
+        ) as stream:
+            final = await stream.get_final_message()
 
-    return ChatResponse(response=response_text)
+        text = next(
+            (block.text for block in final.content if block.type == "text"),
+            ""
+        )
+        return ChatResponse(response=text)
+
+    except anthropic.APIStatusError as e:
+        raise HTTPException(status_code=500, detail=f"Claude API error ({e.status_code}): {e.message}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat error: {e}")
