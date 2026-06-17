@@ -286,16 +286,26 @@ def export_pdf(analysis_id: str):
         "info": (59, 130, 246),    "clean": (34, 197, 94),
     }
 
+    def _safe(text):
+        if not isinstance(text, str):
+            text = str(text)
+        return (text
+            .replace("—", "-").replace("–", "-")
+            .replace("‘", "'").replace("’", "'")
+            .replace("“", '"').replace("”", '"')
+            .replace("•", "*").replace("…", "...")
+            .encode("latin-1", errors="replace").decode("latin-1"))
+
     def heading(text, size=14):
         pdf.set_font("Helvetica", "B", size)
         pdf.set_text_color(30, 30, 30)
-        pdf.cell(0, 8, text, ln=True)
+        pdf.cell(0, 8, _safe(text), ln=True)
         pdf.ln(1)
 
     def body(text, size=10):
         pdf.set_font("Helvetica", "", size)
         pdf.set_text_color(60, 60, 60)
-        pdf.multi_cell(0, 6, text)
+        pdf.multi_cell(0, 6, _safe(text))
 
     def section_line():
         pdf.set_draw_color(200, 200, 200)
@@ -354,12 +364,12 @@ def export_pdf(analysis_id: str):
         pdf.cell(22, 6, f"  {sev.upper()}", fill=True)
         pdf.set_text_color(30, 30, 30)
         pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(0, 6, f"  {d.get('headline', '')}", ln=True)
+        pdf.cell(0, 6, _safe(f"  {d.get('headline', '')}"), ln=True)
         pdf.set_font("Helvetica", "", 9)
         pdf.set_text_color(80, 80, 80)
         for detail in d.get("details", []):
             pdf.cell(22)
-            pdf.multi_cell(0, 5, f"• {detail}")
+            pdf.multi_cell(0, 5, _safe(f"* {detail}"))
         pdf.ln(2)
 
     # Security findings
@@ -388,7 +398,7 @@ def export_pdf(analysis_id: str):
             pdf.set_text_color(*c)
             pdf.cell(20, 5, sev.upper())
             pdf.set_text_color(50, 50, 50)
-            pdf.multi_cell(0, 5, e.get("detail", "")[:120])
+            pdf.multi_cell(0, 5, _safe(e.get("detail", ""))[:120])
 
     # Top flows
     flows = (report.get("flow") or {}).get("flows", [])[:30]
