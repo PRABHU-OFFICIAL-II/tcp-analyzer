@@ -1,5 +1,13 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
+
+# Load .env from backend/ directory if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / ".env", override=True)
+except ImportError:
+    pass
 from fastapi.middleware.cors import CORSMiddleware
 from . import db
 from .routes.analysis import router as analysis_router

@@ -1,5 +1,7 @@
 import os
+import json
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Any
 
@@ -151,15 +153,8 @@ def _build_report_summary(report: dict) -> str:
     return "\n".join(lines)
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat")
 async def chat(req: ChatRequest):
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise HTTPException(
-            status_code=500,
-            detail="ANTHROPIC_API_KEY is not set. Add it to the systemd service environment."
-        )
-
     try:
         import anthropic
     except ImportError:
@@ -168,7 +163,16 @@ async def chat(req: ChatRequest):
             detail="anthropic package not installed. Run: pip install anthropic"
         )
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+    auth_token = os.environ.get("ANTHROPIC_AUTH_TOKEN")
+    base_url = os.environ.get("ANTHROPIC_BEDROCK_BASE_URL")
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    use_bedrock = bool(auth_token and base_url)
+
+    if not use_bedrock and not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="No API credentials found. Set ANTHROPIC_AUTH_TOKEN + ANTHROPIC_BEDROCK_BASE_URL in backend/.env"
+        )
 
     report_summary = _build_report_summary(req.report)
     context_block = (
@@ -201,23 +205,73 @@ async def chat(req: ChatRequest):
             continue
         messages.append({"role": msg.role, "content": msg.content})
 
-    try:
-        async with client.messages.stream(
-            model="claude-opus-4-8",
-            max_tokens=8192,
-            system=SYSTEM_PROMPT,
-            thinking={"type": "adaptive"},
-            messages=messages,
-        ) as stream:
-            final = await stream.get_final_message()
+    async def event_stream():
+        import httpx
+        try:
+            if use_bedrock:
+                model_id = "global.anthropic.claude-sonnet-4-6"
+                ca_bundle = os.environ.get(
+                    "SSL_CERT_FILE",
+                    r"C:\Users\ppenthoi\.claude\certs\salesforce-ca-bundle.pem"
+                )
+                url = f"{base_url.rstrip('/')}/model/{model_id}/invoke-with-response-stream"
+                payload = {
+                    "anthropic_version": "bedrock-2023-05-31",
+                    "max_tokens": 4096,
+                    "system": SYSTEM_PROMPT,
+                    "messages": messages,
+                }
+                headers = {
+                    "x-api-key": auth_token,
+                    "Content-Type": "application/json",
+                    "Accept": "application/vnd.amazon.eventstream",
+                }
+                async with httpx.AsyncClient(verify=ca_bundle, timeout=120.0) as http:
+                    async with http.stream("POST", url, json=payload, headers=headers) as resp:
+                        if resp.status_code != 200:
+                            body = await resp.aread()
+                            yield f"data: {json.dumps({'error': f'Gateway error ({resp.status_code}): {body.decode()}'})}\n\n"
+                            return
+                        import re, base64
+                        async for line in resp.aiter_lines():
+                            if not line:
+                                continue
+                            # AWS EventStream binary format: JSON with base64 "bytes" field
+                            # embedded after binary header markers on each line
+                            match = re.search(r'"bytes"\s*:\s*"([A-Za-z0-9+/=]+)"', line)
+                            if not match:
+                                continue
+                            try:
+                                chunk = json.loads(base64.b64decode(match.group(1)))
+                                delta = chunk.get("delta", {})
+                                text = delta.get("text", "")
+                                if text:
+                                    yield f"data: {json.dumps({'text': text})}\n\n"
+                            except Exception:
+                                continue
+            else:
+                client = anthropic.AsyncAnthropic(api_key=api_key, timeout=120.0)
+                async with client.messages.stream(
+                    model="claude-sonnet-4-6",
+                    max_tokens=4096,
+                    system=SYSTEM_PROMPT,
+                    messages=messages,
+                ) as stream:
+                    async for text in stream.text_stream:
+                        yield f"data: {json.dumps({'text': text})}\n\n"
+            yield "data: [DONE]\n\n"
+        except anthropic.APIStatusError as e:
+            import traceback; traceback.print_exc()
+            yield f"data: {json.dumps({'error': f'Claude API error ({e.status_code}): {e.message}'})}\n\n"
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
-        text = next(
-            (block.text for block in final.content if block.type == "text"),
-            ""
-        )
-        return ChatResponse(response=text)
-
-    except anthropic.APIStatusError as e:
-        raise HTTPException(status_code=500, detail=f"Claude API error ({e.status_code}): {e.message}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chat error: {e}")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

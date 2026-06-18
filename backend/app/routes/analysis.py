@@ -21,7 +21,7 @@ async def analyze_pcap(file: UploadFile = File(...)):
         tmp_path = tmp.name
 
     try:
-        report = run_analysis(tmp_path, file.filename)
+        report = run_analysis(tmp_path, file.filename, save=False)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
