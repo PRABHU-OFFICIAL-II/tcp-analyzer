@@ -211,6 +211,7 @@ class RSTEvidenceStep(BaseModel):
     src_port: int
     dst_port: int
     detail: str
+    payload_bytes: int = 0
 
 
 class RSTAnalysis(BaseModel):
@@ -231,6 +232,7 @@ class RSTAnalysis(BaseModel):
     recommendation: str
 
     evidence_chain: List[RSTEvidenceStep] = []
+    full_trace: List[RSTEvidenceStep] = []
 
     stream_duration_sec: Optional[float] = None
     idle_gap_before_rst_sec: Optional[float] = None
@@ -245,6 +247,54 @@ class RSTForensicsMetrics(BaseModel):
     total_resets: int = 0
     classified: List[RSTAnalysis] = []
     by_cause: Dict[str, int] = {}
+
+
+# ── Proxy Detection ───────────────────────────────────────────────────────────
+
+class ProxySignal(BaseModel):
+    signal_type: str          # "http_connect", "socks5", "proxy_headers", etc.
+    src_ip: str
+    dst_ip: str
+    src_port: int
+    dst_port: int
+    packet_number: int
+    detail: str
+    severity: str             # "warning", "info"
+
+
+class ProxyHost(BaseModel):
+    ip: str
+    ports: List[int] = []
+    signals: List[str] = []
+    connect_targets: List[str] = []
+    via_values: List[str] = []
+    packet_count: int = 0
+
+
+class ProxyMetrics(BaseModel):
+    verdict: str = "No proxy indicators detected"
+    verdict_severity: str = "clean"
+    proxy_hosts: List[ProxyHost] = []
+    signals: List[ProxySignal] = []
+    total_signals: int = 0
+
+
+# ── MAC Map ───────────────────────────────────────────────────────────────────
+
+class MacEntry(BaseModel):
+    mac: str
+    manufacturer: str = "Unknown"
+    hostname: Optional[str] = None
+    hostname_source: Optional[str] = None        # "DHCP", "mDNS", "NetBIOS", "DNS-PTR"
+    all_hostnames: Dict[str, str] = {}           # source -> name (all found)
+    ips: List[str] = []
+    packet_count: int = 0
+
+
+class MacMapMetrics(BaseModel):
+    entries: List[MacEntry] = []
+    total_devices: int = 0
+    resolved_hostnames: int = 0
 
 
 # ── History summary ────────────────────────────────────────────────────────────

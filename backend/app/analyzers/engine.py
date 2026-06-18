@@ -15,6 +15,8 @@ from .rst_forensics import analyze_rst_forensics
 from .timeline import build_timeline
 from .http_objects import analyze_http_objects
 from .dns_map import analyze_dns_map
+from .mac_map import analyze_mac_map
+from .proxy import analyze_proxy
 from .. import db, thresholds
 
 
@@ -60,6 +62,8 @@ def run_analysis(filepath: str, filename: str, save: bool = True) -> AnalysisRep
     rst_forensics = analyze_rst_forensics(packets)
     http_objects  = analyze_http_objects(packets)
     dns_map       = analyze_dns_map(packets)
+    mac_map       = analyze_mac_map(packets)
+    proxy         = analyze_proxy(packets)
     timeline      = build_timeline(perf, sec, proto, arp, ioc, beacons, rst_forensics, start_ts)
 
     diagnoses = _build_diagnoses(perf, sec, proto, arp, ioc, beacons, tls_deep, rst_forensics)
@@ -86,6 +90,8 @@ def run_analysis(filepath: str, filename: str, save: bool = True) -> AnalysisRep
         timeline=timeline,
         http_objects=http_objects,
         dns_map=dns_map,
+        mac_map=mac_map,
+        proxy=proxy,
     )
 
     if save:

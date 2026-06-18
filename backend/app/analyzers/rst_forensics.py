@@ -240,6 +240,7 @@ def _classify_stream(rst_pkt_num, rst_pkt, stream) -> RSTAnalysis:
     last_data_ts     = None
     first_ts         = None
     evidence: list   = []
+    full_trace: list = []
 
     for pkt_num, pkt in stream_sorted:
         p_ip  = pkt["IP"]
@@ -307,6 +308,22 @@ def _classify_stream(rst_pkt_num, rst_pkt, stream) -> RSTAnalysis:
         if _has_flag(p_tcp.flags, "RST"):
             step_detail = f"CONNECTION RESET by {p_ip.src}:{p_tcp.sport}"
 
+        payload_size = len(bytes(pkt["Raw"])) if pkt.haslayer("Raw") else 0
+
+        # Every packet goes into the full trace
+        full_trace.append(RSTEvidenceStep(
+            packet_number=pkt_num,
+            timestamp=ts,
+            flags=flags,
+            src_ip=p_ip.src,
+            dst_ip=p_ip.dst,
+            src_port=p_tcp.sport,
+            dst_port=p_tcp.dport,
+            detail=step_detail or f"{p_ip.src}:{p_tcp.sport} → {p_ip.dst}:{p_tcp.dport}",
+            payload_bytes=payload_size,
+        ))
+
+        # Only significant packets go into the evidence chain
         if step_detail:
             evidence.append(RSTEvidenceStep(
                 packet_number=pkt_num,
@@ -317,6 +334,7 @@ def _classify_stream(rst_pkt_num, rst_pkt, stream) -> RSTAnalysis:
                 src_port=p_tcp.sport,
                 dst_port=p_tcp.dport,
                 detail=step_detail,
+                payload_bytes=payload_size,
             ))
 
     # ── Determine RST sender role ──────────────────────────────────────────────
@@ -368,6 +386,7 @@ def _classify_stream(rst_pkt_num, rst_pkt, stream) -> RSTAnalysis:
         explanation=cause["explanation"],
         recommendation=cause["recommendation"],
         evidence_chain=evidence,
+        full_trace=full_trace,
         stream_duration_sec=stream_duration,
         idle_gap_before_rst_sec=idle_gap,
         bytes_exchanged=bytes_exchanged,

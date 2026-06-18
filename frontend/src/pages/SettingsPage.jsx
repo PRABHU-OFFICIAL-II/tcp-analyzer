@@ -1,37 +1,22 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Save, RotateCcw } from "lucide-react";
+import { ArrowLeft, Save, RotateCcw, Settings, Zap, ShieldCheck, Activity, Radio, BarChart2, Cpu } from "lucide-react";
 
-const s = {
-  page: { minHeight: "100vh", background: "#0f1117", padding: "2rem", maxWidth: "700px", margin: "0 auto" },
-  header: { display: "flex", alignItems: "center", gap: "1rem", marginBottom: "2rem" },
-  backBtn: { background: "none", border: "1px solid #3b4268", color: "#94a3b8",
-    borderRadius: "8px", padding: "0.5rem 1rem", cursor: "pointer",
-    display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.875rem" },
-  title: { fontSize: "1.5rem", fontWeight: 700, color: "#f1f5f9" },
-  section: { background: "#1e2130", border: "1px solid #2d3148", borderRadius: "12px",
-    padding: "1.5rem", marginBottom: "1.5rem" },
-  sectionTitle: { fontSize: "0.9rem", fontWeight: 700, color: "#94a3b8",
-    textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1.25rem" },
-  field: { marginBottom: "1rem" },
-  label: { display: "block", fontSize: "0.82rem", color: "#94a3b8", marginBottom: "0.35rem", fontWeight: 500 },
-  desc: { fontSize: "0.75rem", color: "#475569", marginBottom: "0.4rem" },
-  input: { width: "100%", padding: "0.5rem 0.75rem", background: "#0f1117",
-    border: "1px solid #3b4268", borderRadius: "6px", color: "#e2e8f0",
-    fontSize: "0.88rem", outline: "none" },
-  actions: { display: "flex", gap: "0.75rem", marginTop: "1.5rem" },
-  saveBtn: { padding: "0.6rem 1.5rem", background: "#3b82f6", color: "#fff",
-    border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600,
-    cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem" },
-  resetBtn: { padding: "0.6rem 1.25rem", background: "none", color: "#94a3b8",
-    border: "1px solid #3b4268", borderRadius: "8px", fontSize: "0.9rem",
-    cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem" },
-  toast: (ok) => ({
-    padding: "0.75rem 1.25rem", borderRadius: "8px", fontSize: "0.875rem",
-    background: ok ? "#152d1e" : "#2d1515",
-    border: `1px solid ${ok ? "#22c55e" : "#ef4444"}`,
-    color: ok ? "#4ade80" : "#fca5a5",
-    marginTop: "1rem",
-  }),
+const SECTION_ICONS = {
+  performance: Zap,
+  security: ShieldCheck,
+  protocol: Activity,
+  beacon: Radio,
+  rst_forensics: BarChart2,
+  engine: Cpu,
+};
+
+const SECTION_COLORS = {
+  performance: { bg: "#fffbeb", border: "#fde68a", icon: "#d97706" },
+  security:    { bg: "#f0fdf4", border: "#bbf7d0", icon: "#16a34a" },
+  protocol:    { bg: "#eff6ff", border: "#bfdbfe", icon: "#2563eb" },
+  beacon:      { bg: "#fef2f2", border: "#fecaca", icon: "#dc2626" },
+  rst_forensics: { bg: "#f5f3ff", border: "#ddd6fe", icon: "#7c3aed" },
+  engine:      { bg: "#f8fafc", border: "#e2e8f0", icon: "#475569" },
 };
 
 const FIELDS = [
@@ -108,7 +93,7 @@ export default function SettingsPage({ onBack }) {
       const updated = await res.json();
       setValues(updated);
       setToast({ ok: true, msg: "Thresholds saved. They apply to the next analysis." });
-    } catch (e) {
+    } catch {
       setToast({ ok: false, msg: "Failed to save thresholds." });
     }
     setTimeout(() => setToast(null), 4000);
@@ -127,46 +112,132 @@ export default function SettingsPage({ onBack }) {
   }
 
   return (
-    <div style={s.page}>
-      <div style={s.header}>
-        <button style={s.backBtn} onClick={onBack}><ArrowLeft size={15} /> Back</button>
-        <h1 style={s.title}>Detection Thresholds</h1>
+    <div style={{ minHeight: "100vh", background: "#f0f4f8" }}>
+      <style>{`
+        .set-back:hover { background: #f1f5f9 !important; }
+        .set-input:focus { border-color: #2563eb !important; box-shadow: 0 0 0 3px rgba(37,99,235,0.12) !important; }
+        .set-save:hover { opacity: 0.9; }
+        .set-reset:hover { background: #f1f5f9 !important; }
+      `}</style>
+
+      {/* Header */}
+      <div style={{
+        background: "#fff", borderBottom: "1px solid #e2e8f0",
+        padding: "0 2rem", height: 60,
+        display: "flex", alignItems: "center", gap: "1rem",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+      }}>
+        <button className="set-back" onClick={onBack} style={{
+          background: "transparent", border: "1px solid #e2e8f0", color: "#475569",
+          borderRadius: "8px", padding: "0.4rem 0.9rem", cursor: "pointer",
+          display: "flex", alignItems: "center", gap: "0.4rem",
+          fontSize: "0.83rem", fontWeight: 500, transition: "background 0.15s",
+        }}>
+          <ArrowLeft size={14} /> Back
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <Settings size={18} color="#2563eb" />
+          <h1 style={{ fontSize: "1.15rem", fontWeight: 800, color: "#0f172a" }}>Detection Thresholds</h1>
+        </div>
       </div>
 
-      <p style={{ color: "#64748b", fontSize: "0.875rem", marginBottom: "1.5rem" }}>
-        Tune every detection threshold to match your network environment.
-        Changes apply to the <strong style={{ color: "#94a3b8" }}>next</strong> analysis run.
-      </p>
+      <div style={{ padding: "2rem", maxWidth: "700px", margin: "0 auto" }}>
+        <p style={{ color: "#64748b", fontSize: "0.875rem", marginBottom: "2rem", lineHeight: 1.6 }}>
+          Tune every detection threshold to match your network environment.
+          Changes apply to the <strong style={{ color: "#1e293b" }}>next</strong> analysis run.
+        </p>
 
-      {loading ? (
-        <p style={{ color: "#4b5563" }}>Loading...</p>
-      ) : (
-        FIELDS.map(({ section, label, fields }) => (
-          <div key={section} style={s.section}>
-            <div style={s.sectionTitle}>{label}</div>
-            {fields.map(f => (
-              <div key={f.key} style={s.field}>
-                <label style={s.label}>{f.label}</label>
-                <div style={s.desc}>{f.desc}</div>
-                <input
-                  type="number"
-                  step="any"
-                  style={s.input}
-                  value={values[section]?.[f.key] ?? ""}
-                  onChange={e => handleChange(section, f.key, parseFloat(e.target.value) || 0)}
-                />
+        {loading ? (
+          <div style={{ textAlign: "center", color: "#94a3b8", padding: "3rem" }}>Loading settings…</div>
+        ) : (
+          FIELDS.map(({ section, label, fields }) => {
+            const colors = SECTION_COLORS[section] || { bg: "#f8fafc", border: "#e2e8f0", icon: "#475569" };
+            const Icon = SECTION_ICONS[section] || Settings;
+            return (
+              <div key={section} style={{
+                background: "#fff", border: "1px solid #e2e8f0",
+                borderRadius: "14px", padding: "1.5rem",
+                marginBottom: "1.25rem",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1.25rem" }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: "8px",
+                    background: colors.bg, border: `1px solid ${colors.border}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Icon size={15} color={colors.icon} />
+                  </div>
+                  <span style={{
+                    fontSize: "0.82rem", fontWeight: 700, color: "#475569",
+                    textTransform: "uppercase", letterSpacing: "0.07em",
+                  }}>{label}</span>
+                </div>
+                {fields.map(f => (
+                  <div key={f.key} style={{ marginBottom: "1rem" }}>
+                    <label style={{
+                      display: "block", fontSize: "0.85rem",
+                      color: "#1e293b", fontWeight: 600, marginBottom: "0.2rem",
+                    }}>{f.label}</label>
+                    <p style={{ fontSize: "0.75rem", color: "#94a3b8", marginBottom: "0.4rem" }}>{f.desc}</p>
+                    <input
+                      className="set-input"
+                      type="number"
+                      step="any"
+                      style={{
+                        width: "100%", padding: "0.5rem 0.75rem",
+                        background: "#f8fafc", border: "1px solid #e2e8f0",
+                        borderRadius: "8px", color: "#1e293b",
+                        fontSize: "0.88rem", outline: "none",
+                        transition: "border-color 0.15s, box-shadow 0.15s",
+                        boxSizing: "border-box",
+                      }}
+                      value={values[section]?.[f.key] ?? ""}
+                      onChange={e => handleChange(section, f.key, parseFloat(e.target.value) || 0)}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            );
+          })
+        )}
+
+        <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+          <button className="set-save" onClick={handleSave} style={{
+            padding: "0.65rem 1.75rem",
+            background: "linear-gradient(135deg, #2563eb, #4f46e5)",
+            color: "#fff", border: "none", borderRadius: "10px",
+            fontSize: "0.9rem", fontWeight: 700, cursor: "pointer",
+            display: "flex", alignItems: "center", gap: "0.4rem",
+            boxShadow: "0 3px 10px rgba(37,99,235,0.25)", transition: "opacity 0.2s",
+          }}>
+            <Save size={15} /> Save Thresholds
+          </button>
+          <button className="set-reset" onClick={handleReset} style={{
+            padding: "0.65rem 1.25rem",
+            background: "transparent", color: "#64748b",
+            border: "1px solid #e2e8f0", borderRadius: "10px",
+            fontSize: "0.9rem", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: "0.4rem",
+            transition: "background 0.15s",
+          }}>
+            <RotateCcw size={14} /> Reset to Defaults
+          </button>
+        </div>
+
+        {toast && (
+          <div style={{
+            padding: "0.85rem 1.25rem", borderRadius: "10px", fontSize: "0.875rem",
+            background: toast.ok ? "#f0fdf4" : "#fef2f2",
+            border: `1px solid ${toast.ok ? "#bbf7d0" : "#fecaca"}`,
+            color: toast.ok ? "#16a34a" : "#dc2626",
+            marginTop: "1rem",
+            display: "flex", alignItems: "center", gap: "0.5rem",
+          }}>
+            {toast.ok ? "✓" : "⚠"} {toast.msg}
           </div>
-        ))
-      )}
-
-      <div style={s.actions}>
-        <button style={s.saveBtn} onClick={handleSave}><Save size={15} /> Save</button>
-        <button style={s.resetBtn} onClick={handleReset}><RotateCcw size={14} /> Reset to Defaults</button>
+        )}
       </div>
-
-      {toast && <div style={s.toast(toast.ok)}>{toast.msg}</div>}
     </div>
   );
 }
