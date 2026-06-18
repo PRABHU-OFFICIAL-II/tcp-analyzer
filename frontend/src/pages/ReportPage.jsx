@@ -2,14 +2,13 @@ import { useState } from "react";
 import {
   ArrowLeft, FileText, Shield, Zap, Globe, Network,
   Fingerprint, Lock, MapPin, Radio, AlertTriangle,
-  Clock, Globe2, Server,
+  Clock, Globe2, Server, Cpu, ShieldAlert,
 } from "lucide-react";
 import DiagnosisCard from "../components/DiagnosisCard.jsx";
 import AnomalyTable from "../components/AnomalyTable.jsx";
 import AIChatPanel from "../components/AIChatPanel.jsx";
 import StatCard from "../components/StatCard.jsx";
 import ThroughputChart from "../components/ThroughputChart.jsx";
-import ExportBar from "../components/ExportBar.jsx";
 import FlowTable from "../components/FlowTable.jsx";
 import FingerprintPanel from "../components/FingerprintPanel.jsx";
 import TLSDeepPanel from "../components/TLSDeepPanel.jsx";
@@ -19,6 +18,8 @@ import RSTForensicsPanel from "../components/RSTForensicsPanel.jsx";
 import TimelinePanel from "../components/TimelinePanel.jsx";
 import HTTPObjectsPanel from "../components/HTTPObjectsPanel.jsx";
 import DNSMapPanel from "../components/DNSMapPanel.jsx";
+import MacMapPanel from "../components/MacMapPanel.jsx";
+import ProxyPanel from "../components/ProxyPanel.jsx";
 
 const TABS = [
   { id: "overview",     label: "Overview",     icon: <FileText size={14} /> },
@@ -34,27 +35,54 @@ const TABS = [
   { id: "geo",          label: "Geo / IOC",    icon: <MapPin size={14} /> },
   { id: "beacons",      label: "Beacons",      icon: <Radio size={14} /> },
   { id: "rst",          label: "RST Forensics", icon: <AlertTriangle size={14} /> },
+  { id: "macmap",       label: "MAC Map",       icon: <Cpu size={14} /> },
+  { id: "proxy",        label: "Proxy",         icon: <ShieldAlert size={14} /> },
 ];
 
 const layout = {
-  page: { minHeight: "100vh", background: "#0f1117", padding: "2rem" },
-  header: { display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" },
-  backBtn: { background: "none", border: "1px solid #3b4268", color: "#94a3b8", borderRadius: "8px",
-    padding: "0.5rem 1rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.875rem" },
-  filename: { fontSize: "1.4rem", fontWeight: 700, color: "#f1f5f9" },
-  meta: { color: "#64748b", fontSize: "0.875rem", marginLeft: "auto" },
-  tabBar: { display: "flex", gap: "0.15rem", borderBottom: "1px solid #2d3148", marginBottom: "2rem", overflowX: "auto" },
+  page: { minHeight: "100vh", background: "#f0f4f8", padding: "2rem" },
+  header: {
+    display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.5rem",
+    flexWrap: "wrap", background: "#fff", borderRadius: "14px",
+    padding: "1rem 1.5rem", boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
+    border: "1px solid #e2e8f0",
+  },
+  backBtn: {
+    background: "#f8fafc", border: "1px solid #e2e8f0", color: "#475569",
+    borderRadius: "8px", padding: "0.45rem 1rem", cursor: "pointer",
+    display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.84rem",
+    fontWeight: 500,
+  },
+  filename: { fontSize: "1.3rem", fontWeight: 700, color: "#0f172a" },
+  meta: { color: "#94a3b8", fontSize: "0.84rem", marginLeft: "auto" },
+  tabBar: {
+    display: "flex", gap: "0.1rem", marginBottom: "1.75rem", overflowX: "auto",
+    background: "#fff", borderRadius: "12px", padding: "0.35rem",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.07)", border: "1px solid #e2e8f0",
+  },
   tab: (active) => ({
-    padding: "0.6rem 1rem", cursor: "pointer", background: "none", border: "none", whiteSpace: "nowrap",
-    color: active ? "#60a5fa" : "#64748b",
-    borderBottom: active ? "2px solid #60a5fa" : "2px solid transparent",
-    fontWeight: active ? 600 : 400, fontSize: "0.82rem",
+    padding: "0.5rem 0.9rem", cursor: "pointer", whiteSpace: "nowrap",
+    border: "none", borderRadius: "8px",
+    background: active ? "#eff6ff" : "transparent",
+    color: active ? "#2563eb" : "#64748b",
+    fontWeight: active ? 600 : 400, fontSize: "0.81rem",
     display: "flex", alignItems: "center", gap: "0.35rem",
+    transition: "all 0.15s",
   }),
-  statsGrid: { display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))", marginBottom: "2rem" },
-  sectionTitle: { fontSize: "1rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "1rem",
-    paddingBottom: "0.5rem", borderBottom: "1px solid #2d3148" },
-  card: { background: "#1e2130", border: "1px solid #2d3148", borderRadius: "12px", padding: "1.5rem", marginBottom: "1.5rem" },
+  statsGrid: {
+    display: "grid", gap: "1rem",
+    gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))",
+    marginBottom: "1.75rem",
+  },
+  sectionTitle: {
+    fontSize: "0.95rem", fontWeight: 700, color: "#0f172a", marginBottom: "1rem",
+    paddingBottom: "0.5rem", borderBottom: "2px solid #e2e8f0",
+  },
+  card: {
+    background: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px",
+    padding: "1.5rem", marginBottom: "1.5rem",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+  },
 };
 
 export default function ReportPage({ report, onReset }) {
@@ -72,8 +100,6 @@ export default function ReportPage({ report, onReset }) {
           {report.unique_ips.length} IPs
         </span>
       </div>
-
-      <ExportBar analysisId={report.analysis_id} />
 
       <div style={layout.tabBar}>
         {TABS.map(t => (
@@ -96,6 +122,8 @@ export default function ReportPage({ report, onReset }) {
       {tab === "geo"         && <GeoTab geo={report.geo} />}
       {tab === "beacons"     && <BeaconsTab beacons={report.beacons} />}
       {tab === "rst"         && <RSTForensicsTab metrics={report.rst_forensics} />}
+      {tab === "macmap"      && <MacMapTab macMap={report.mac_map} />}
+      {tab === "proxy"       && <ProxyTab proxy={report.proxy} />}
 
       <AIChatPanel report={report} />
     </div>
@@ -180,7 +208,7 @@ function SecurityTab({ sec, arp, ioc }) {
         <StatCard label="IOC Matches"      value={iocMatches.length}                 color={iocMatches.length > 0 ? "#ef4444" : "#22c55e"} />
         <StatCard label="Scanner Sigs"     value={scannerSigs.length}                color={scannerSigs.length > 0 ? "#ef4444" : "#22c55e"} />
       </div>
-      {total === 0 && <div style={{ ...layout.card, textAlign: "center", color: "#22c55e" }}>No security anomalies detected</div>}
+      {total === 0 && <div style={{ ...layout.card, textAlign: "center", color: "#16a34a", fontWeight: 600 }}>No security anomalies detected</div>}
       <AnomalyTable title="Port Scan Activity"          entries={sec.port_scan_sources} />
       <AnomalyTable title="Cleartext Credentials"       entries={sec.cleartext_credentials} />
       <AnomalyTable title="Protocol / Port Mismatches"  entries={sec.protocol_port_mismatches} />
@@ -188,12 +216,12 @@ function SecurityTab({ sec, arp, ioc }) {
       <AnomalyTable title="Scanner Tool Signatures"     entries={scannerSigs} />
       {arpConflicts.length > 0 && (
         <div style={{ marginBottom: "2rem" }}>
-          <h3 style={{ color: "#94a3b8", fontSize: "0.85rem", fontWeight: 600, textTransform: "uppercase",
+          <h3 style={{ color: "#475569", fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase",
             letterSpacing: "0.07em", marginBottom: "0.75rem" }}>ARP Spoofing Conflicts</h3>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid #2d3148" }}>
+                <tr style={{ borderBottom: "2px solid #e2e8f0", background: "#f8fafc" }}>
                   {["IP Address", "MACs Observed", "Packet #", "Timestamp"].map(h => (
                     <th key={h} style={{ textAlign: "left", padding: "0.5rem 0.75rem", color: "#64748b", fontWeight: 600 }}>{h}</th>
                   ))}
@@ -201,11 +229,11 @@ function SecurityTab({ sec, arp, ioc }) {
               </thead>
               <tbody>
                 {arpConflicts.map((c, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid #1e2130" }}>
-                    <td style={{ padding: "0.5rem 0.75rem", color: "#ef4444", fontFamily: "monospace", fontWeight: 600 }}>{c.ip}</td>
-                    <td style={{ padding: "0.5rem 0.75rem", color: "#fca5a5", fontFamily: "monospace" }}>{c.macs_seen.join(", ")}</td>
-                    <td style={{ padding: "0.5rem 0.75rem", color: "#94a3b8" }}>{c.packet_number}</td>
-                    <td style={{ padding: "0.5rem 0.75rem", color: "#64748b" }}>{new Date(c.timestamp * 1000).toLocaleTimeString()}</td>
+                  <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: "0.5rem 0.75rem", color: "#dc2626", fontFamily: "monospace", fontWeight: 600 }}>{c.ip}</td>
+                    <td style={{ padding: "0.5rem 0.75rem", color: "#ef4444", fontFamily: "monospace" }}>{c.macs_seen.join(", ")}</td>
+                    <td style={{ padding: "0.5rem 0.75rem", color: "#64748b" }}>{c.packet_number}</td>
+                    <td style={{ padding: "0.5rem 0.75rem", color: "#94a3b8" }}>{new Date(c.timestamp * 1000).toLocaleTimeString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -215,12 +243,12 @@ function SecurityTab({ sec, arp, ioc }) {
       )}
       {iocMatches.length > 0 && (
         <div style={{ marginBottom: "2rem" }}>
-          <h3 style={{ color: "#94a3b8", fontSize: "0.85rem", fontWeight: 600, textTransform: "uppercase",
+          <h3 style={{ color: "#475569", fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase",
             letterSpacing: "0.07em", marginBottom: "0.75rem" }}>IOC Matches</h3>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid #2d3148" }}>
+                <tr style={{ borderBottom: "2px solid #e2e8f0", background: "#f8fafc" }}>
                   {["IP", "Source", "Severity", "Detail"].map(h => (
                     <th key={h} style={{ textAlign: "left", padding: "0.5rem 0.75rem", color: "#64748b", fontWeight: 600 }}>{h}</th>
                   ))}
@@ -228,12 +256,12 @@ function SecurityTab({ sec, arp, ioc }) {
               </thead>
               <tbody>
                 {iocMatches.map((m, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid #1e2130" }}>
-                    <td style={{ padding: "0.5rem 0.75rem", color: "#ef4444", fontFamily: "monospace" }}>{m.ip}</td>
-                    <td style={{ padding: "0.5rem 0.75rem", color: "#94a3b8" }}>{m.source}</td>
-                    <td style={{ padding: "0.5rem 0.75rem", color: m.severity === "critical" ? "#ef4444" : "#f59e0b",
-                      fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase" }}>{m.severity}</td>
-                    <td style={{ padding: "0.5rem 0.75rem", color: "#94a3b8" }}>{m.detail}</td>
+                  <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: "0.5rem 0.75rem", color: "#dc2626", fontFamily: "monospace", fontWeight: 600 }}>{m.ip}</td>
+                    <td style={{ padding: "0.5rem 0.75rem", color: "#64748b" }}>{m.source}</td>
+                    <td style={{ padding: "0.5rem 0.75rem", color: m.severity === "critical" ? "#dc2626" : "#d97706",
+                      fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>{m.severity}</td>
+                    <td style={{ padding: "0.5rem 0.75rem", color: "#475569" }}>{m.detail}</td>
                   </tr>
                 ))}
               </tbody>
@@ -262,11 +290,11 @@ function ProtocolTab({ proto }) {
           <h2 style={layout.sectionTitle}>HTTP Status Codes</h2>
           <div style={{ ...layout.card, display: "flex", gap: "1rem", flexWrap: "wrap" }}>
             {statusEntries.map(([code, count]) => (
-              <div key={code} style={{ background: "#0f1117", borderRadius: "8px", padding: "0.75rem 1.25rem",
-                textAlign: "center", border: `1px solid ${code.startsWith("2") ? "#22c55e" : code.startsWith("4") || code.startsWith("5") ? "#ef4444" : "#3b4268"}` }}>
+              <div key={code} style={{ background: "#f8fafc", borderRadius: "10px", padding: "0.75rem 1.25rem",
+                textAlign: "center", border: `1px solid ${code.startsWith("2") ? "#bbf7d0" : code.startsWith("4") || code.startsWith("5") ? "#fecaca" : "#e2e8f0"}` }}>
                 <div style={{ fontSize: "1.5rem", fontWeight: 700,
-                  color: code.startsWith("2") ? "#22c55e" : code.startsWith("4") || code.startsWith("5") ? "#ef4444" : "#94a3b8" }}>{count}</div>
-                <div style={{ fontSize: "0.8rem", color: "#64748b" }}>HTTP {code}</div>
+                  color: code.startsWith("2") ? "#16a34a" : code.startsWith("4") || code.startsWith("5") ? "#dc2626" : "#475569" }}>{count}</div>
+                <div style={{ fontSize: "0.78rem", color: "#94a3b8", fontWeight: 500 }}>HTTP {code}</div>
               </div>
             ))}
           </div>
@@ -375,7 +403,7 @@ function GeoTab({ geo }) {
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
           <thead>
-            <tr style={{ borderBottom: "1px solid #2d3148" }}>
+            <tr style={{ borderBottom: "2px solid #e2e8f0", background: "#f8fafc" }}>
               {["IP Address", "Country", "City", "ISP", "Bytes"].map(h => (
                 <th key={h} style={{ textAlign: "left", padding: "0.5rem 0.75rem", color: "#64748b", fontWeight: 600 }}>{h}</th>
               ))}
@@ -383,12 +411,12 @@ function GeoTab({ geo }) {
           </thead>
           <tbody>
             {geo.entries.map((e, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #1e2130" }}>
-                <td style={{ padding: "0.5rem 0.75rem", color: "#cbd5e1", fontFamily: "monospace" }}>{e.ip}</td>
-                <td style={{ padding: "0.5rem 0.75rem", color: "#e2e8f0" }}>{e.country_code} {e.country}</td>
-                <td style={{ padding: "0.5rem 0.75rem", color: "#94a3b8" }}>{e.city || "—"}</td>
-                <td style={{ padding: "0.5rem 0.75rem", color: "#94a3b8" }}>{e.isp || "—"}</td>
-                <td style={{ padding: "0.5rem 0.75rem", color: "#60a5fa", fontWeight: 600 }}>
+              <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "0.5rem 0.75rem", color: "#1e293b", fontFamily: "monospace", fontWeight: 500 }}>{e.ip}</td>
+                <td style={{ padding: "0.5rem 0.75rem", color: "#334155" }}>{e.country_code} {e.country}</td>
+                <td style={{ padding: "0.5rem 0.75rem", color: "#64748b" }}>{e.city || "—"}</td>
+                <td style={{ padding: "0.5rem 0.75rem", color: "#64748b" }}>{e.isp || "—"}</td>
+                <td style={{ padding: "0.5rem 0.75rem", color: "#2563eb", fontWeight: 600 }}>
                   {e.bytes >= 1e6 ? (e.bytes / 1e6).toFixed(2) + " MB" : e.bytes >= 1e3 ? (e.bytes / 1e3).toFixed(1) + " KB" : e.bytes + " B"}
                 </td>
               </tr>
@@ -412,12 +440,43 @@ function RSTForensicsTab({ metrics }) {
         <StatCard label="Distinct Causes" value={causeCount}            color="#a78bfa" />
       </div>
       {metrics.total_resets > 0 && (
-        <div style={{ background: "#2d1515", border: "1px solid #7f1d1d22", borderRadius: "8px",
-          padding: "0.75rem 1rem", marginBottom: "1.5rem", color: "#fca5a5", fontSize: "0.85rem" }}>
+        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px",
+          padding: "0.75rem 1rem", marginBottom: "1.5rem", color: "#dc2626", fontSize: "0.85rem" }}>
           <strong>Click any card below</strong> to expand the full evidence chain and root cause explanation.
         </div>
       )}
       <RSTForensicsPanel metrics={metrics} />
+    </div>
+  );
+}
+
+function MacMapTab({ macMap }) {
+  return (
+    <div>
+      <h2 style={layout.sectionTitle}>MAC Address Map</h2>
+      <p style={{ color: "#64748b", fontSize: "0.875rem", marginBottom: "1.5rem" }}>
+        Every MAC address seen in this capture, enriched with the OUI manufacturer name
+        and device hostname sourced from DHCP, mDNS, NetBIOS, and DNS PTR records.
+      </p>
+      <div style={layout.card}>
+        <MacMapPanel macMap={macMap} />
+      </div>
+    </div>
+  );
+}
+
+function ProxyTab({ proxy }) {
+  return (
+    <div>
+      <h2 style={layout.sectionTitle}>Proxy Detection</h2>
+      <p style={{ color: "#64748b", fontSize: "0.875rem", marginBottom: "1.5rem" }}>
+        Detects proxy involvement using 7 signals: HTTP CONNECT tunnels, SOCKS4/5 handshakes,
+        proxy headers (Via, X-Forwarded-For, Proxy-Authorization), known proxy ports,
+        and XFF chain leaks that reveal internal IPs behind a proxy.
+      </p>
+      <div style={layout.card}>
+        <ProxyPanel proxy={proxy} />
+      </div>
     </div>
   );
 }
@@ -430,8 +489,8 @@ function BeaconsTab({ beacons }) {
         <StatCard label="Beaconing Flows" value={beacons.beacons.length} color={beacons.beacons.length > 0 ? "#ef4444" : "#22c55e"} />
       </div>
       {beacons.beacons.length > 0 && (
-        <div style={{ background: "#2d1515", border: "1px solid #7f1d1d", borderRadius: "8px",
-          padding: "0.75rem 1rem", marginBottom: "1.5rem", color: "#fca5a5", fontSize: "0.85rem" }}>
+        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px",
+          padding: "0.75rem 1rem", marginBottom: "1.5rem", color: "#dc2626", fontSize: "0.85rem" }}>
           <strong>Beaconing detected.</strong> Flows connecting at regular intervals may indicate C2 callbacks.
           Lower CV = more regular timing = more suspicious.
         </div>

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import UploadPage from "./pages/UploadPage.jsx";
 import ReportPage from "./pages/ReportPage.jsx";
-import HistoryPage from "./pages/HistoryPage.jsx";
 import ComparePage from "./pages/ComparePage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 
@@ -28,16 +27,8 @@ export default function App() {
     }
   }
 
-  function handleReport(data) {
-    setReport(data);
-    setView("report");
-  }
-
   if (view === "report" && report) {
     return <ReportPage report={report} onReset={() => { setReport(null); setView("upload"); }} />;
-  }
-  if (view === "history") {
-    return <HistoryPage onLoad={handleReport} onBack={() => setView("upload")} />;
   }
   if (view === "compare") {
     return <ComparePage onBack={() => setView("upload")} />;
@@ -50,7 +41,6 @@ export default function App() {
       onUpload={handleUpload}
       loading={loading}
       error={error}
-      onHistory={() => setView("history")}
       onCompare={() => setView("compare")}
       onSettings={() => setView("settings")}
     />

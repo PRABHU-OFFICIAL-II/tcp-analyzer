@@ -77,3 +77,5 @@ class AnalysisReport(BaseModel):
     timeline: Optional[Any] = None
     http_objects: Optional[Any] = None
     dns_map: Optional[Any] = None
+    mac_map: Optional[Any] = None
+    proxy: Optional[Any] = None
