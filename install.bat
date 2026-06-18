@@ -117,8 +117,15 @@ except Exception as e:
         echo  WARNING: No ANTHROPIC_AUTH_TOKEN in settings.json - AI chat disabled.
     )
 ) else (
-    echo  Claude settings not found at %CLAUDE_SETTINGS%
-    echo  AI chat will be disabled. PCAP analysis works normally without it.
+    echo.
+    echo  NOTE: Claude Code is not installed on this machine.
+    echo  Salesforce provides Claude deployed on AWS Bedrock, which requires
+    echo  Claude Code to be installed and configured with your Salesforce
+    echo  credentials. Since it is not detected here, everything in the app
+    echo  will work normally EXCEPT the AI Analysis of TCP captures.
+    echo  To enable AI Analysis, install Claude Code via your Salesforce
+    echo  IT portal and re-run this script.
+    echo.
 )
 
 :: ── 4. Write backend\.env ──────────────────────────────────
