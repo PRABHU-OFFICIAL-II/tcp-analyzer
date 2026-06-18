@@ -337,8 +337,38 @@ export default function AIChatPanel({ report }) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `HTTP ${res.status}`);
       }
-      const data = await res.json();
-      setMessages(prev => [...prev, { role: "assistant", content: data.response }]);
+
+      // Read SSE stream token by token
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
+      // Add empty assistant message to stream into
+      setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6).trim();
+          if (payload === "[DONE]") break;
+          try {
+            const parsed = JSON.parse(payload);
+            if (parsed.error) throw new Error(parsed.error);
+            if (parsed.text) {
+              accumulated += parsed.text;
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: "assistant", content: accumulated };
+                return updated;
+              });
+            }
+          } catch (parseErr) {
+            if (parseErr.message !== "Unexpected end of JSON input") throw parseErr;
+          }
+        }
+      }
     } catch (e) {
       setError(e.message);
     } finally {
