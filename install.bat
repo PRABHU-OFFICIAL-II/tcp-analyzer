@@ -12,12 +12,36 @@ set "REPO_URL=https://github.com/PRABHU-OFFICIAL-II/tcp-analyzer.git"
 set "APP_DIR=%USERPROFILE%\tcp-analyzer"
 set "BACKEND_DIR=%APP_DIR%\backend"
 set "FRONTEND_DIR=%APP_DIR%\frontend"
-set "TMP_PY=%TEMP%\tcpanalyzer_helper.py"
+set "TMP_SETTINGS=%TEMP%\tcpa_read_settings.py"
+set "TMP_CONNECT=%TEMP%\tcpa_check_connect.py"
 
-:: ── 1. Auto-install prerequisites via winget ───────────────
+:: ── Write Python helpers FIRST (top-level echo - no batch parenthesis issues) ──
+
+echo import json, sys > "%TMP_SETTINGS%"
+echo try: >> "%TMP_SETTINGS%"
+echo     d = json.load(open(sys.argv[1])) >> "%TMP_SETTINGS%"
+echo     env = d.get("env", {}) >> "%TMP_SETTINGS%"
+echo     print("AUTH=" + env.get("ANTHROPIC_AUTH_TOKEN", "")) >> "%TMP_SETTINGS%"
+echo     print("URL="  + env.get("ANTHROPIC_BEDROCK_BASE_URL", "")) >> "%TMP_SETTINGS%"
+echo     print("CERT=" + env.get("NODE_EXTRA_CA_CERTS", "")) >> "%TMP_SETTINGS%"
+echo except Exception as e: >> "%TMP_SETTINGS%"
+echo     print("ERR=" + str(e)) >> "%TMP_SETTINGS%"
+
+echo import urllib.request, ssl, os, sys > "%TMP_CONNECT%"
+echo url  = sys.argv[1] >> "%TMP_CONNECT%"
+echo cert = sys.argv[2] if len(sys.argv) > 2 else "" >> "%TMP_CONNECT%"
+echo try: >> "%TMP_CONNECT%"
+echo     ctx = ssl.create_default_context() >> "%TMP_CONNECT%"
+echo     if cert and os.path.exists(cert): >> "%TMP_CONNECT%"
+echo         ctx.load_verify_locations(cert) >> "%TMP_CONNECT%"
+echo     urllib.request.urlopen(url, timeout=5, context=ctx) >> "%TMP_CONNECT%"
+echo     print("REACHABLE") >> "%TMP_CONNECT%"
+echo except: >> "%TMP_CONNECT%"
+echo     print("UNREACHABLE") >> "%TMP_CONNECT%"
+
+:: ── 1. Prerequisites ────────────────────────────────────────
 echo [1/7] Checking and installing prerequisites...
 
-:: Git
 where git >nul 2>&1
 if errorlevel 1 (
     echo  git not found - installing via winget...
@@ -27,7 +51,6 @@ if errorlevel 1 (
 where git >nul 2>&1 || ( echo  ERROR: git install failed. Please restart this script. & pause & exit /b 1 )
 echo  git: OK
 
-:: Python - find a 3.9+ interpreter
 set "PYTHON="
 for %%C in (python python3) do (
     if "!PYTHON!"=="" (
@@ -47,10 +70,9 @@ if "!PYTHON!"=="" (
         if "!PYTHON!"=="" ( where %%C >nul 2>&1 && set "PYTHON=%%C" )
     )
 )
-if "!PYTHON!"=="" ( echo  ERROR: Python install failed. Restart this script after install completes. & pause & exit /b 1 )
+if "!PYTHON!"=="" ( echo  ERROR: Python install failed. Restart this script. & pause & exit /b 1 )
 echo  Python: OK  (!PYTHON!)
 
-:: Node.js
 where node >nul 2>&1
 if errorlevel 1 (
     echo  Node.js not found - installing via winget...
@@ -61,7 +83,7 @@ where node >nul 2>&1 || ( echo  ERROR: Node.js install failed. Restart this scri
 where npm  >nul 2>&1 || ( echo  ERROR: npm not found after Node install. Restart this script. & pause & exit /b 1 )
 echo  Node.js / npm: OK
 
-:: ── 2. Clone or update repo ────────────────────────────────
+:: ── 2. Clone or update repo ─────────────────────────────────
 echo.
 echo [2/7] Cloning / updating repository...
 
@@ -77,7 +99,7 @@ if exist "%APP_DIR%\.git" (
 )
 echo  Repository ready.
 
-:: ── 3. Read Claude settings.json ───────────────────────────
+:: ── 3. Read Claude settings.json ────────────────────────────
 echo.
 echo [3/7] Reading Claude Code settings...
 
@@ -86,91 +108,62 @@ set "AUTH_TOKEN="
 set "BEDROCK_URL="
 set "SSL_CERT="
 
-if exist "%CLAUDE_SETTINGS%" (
+if not exist "%CLAUDE_SETTINGS%" goto :no_claude
 
-    :: Write helper script to a temp file to avoid cmd parenthesis parsing issues
-    (
-        echo import json, sys
-        echo try:
-        echo     d = json.load(open(sys.argv[1]))
-        echo     env = d.get('env', {})
-        echo     print('AUTH=' + env.get('ANTHROPIC_AUTH_TOKEN', ''))
-        echo     print('URL='  + env.get('ANTHROPIC_BEDROCK_BASE_URL', ''))
-        echo     print('CERT=' + env.get('NODE_EXTRA_CA_CERTS', ''))
-        echo except Exception as e:
-        echo     print('ERR=' + str(e))
-    ) > "%TMP_PY%"
-
-    for /f "delims=" %%A in ('!PYTHON! "%TMP_PY%" "%CLAUDE_SETTINGS%" 2^>nul') do (
-        set "LINE=%%A"
-        if "!LINE:~0,5!"=="AUTH=" set "AUTH_TOKEN=!LINE:~5!"
-        if "!LINE:~0,4!"=="URL="  set "BEDROCK_URL=!LINE:~4!"
-        if "!LINE:~0,5!"=="CERT=" set "SSL_CERT=!LINE:~5!"
-        if "!LINE:~0,4!"=="ERR="  echo  WARNING: Could not parse settings.json - !LINE:~4!
-    )
-
-    if not "!AUTH_TOKEN!"=="" (
-        echo  Credentials found - AI Analysis will be configured.
-    ) else (
-        echo  WARNING: No ANTHROPIC_AUTH_TOKEN found in settings.json - AI Analysis will be disabled.
-    )
-
-) else (
-    echo.
-    echo  NOTE: Claude Code is not installed on this machine.
-    echo  Salesforce provides Claude deployed on AWS Bedrock, which requires
-    echo  Claude Code to be installed and configured with your Salesforce
-    echo  credentials. Since it is not detected here, everything in the app
-    echo  will work normally EXCEPT the AI Analysis of TCP captures.
-    echo  To enable AI Analysis, install Claude Code via your Salesforce
-    echo  IT portal and re-run this script.
-    echo.
+for /f "delims=" %%A in ('!PYTHON! "%TMP_SETTINGS%" "%CLAUDE_SETTINGS%" 2^>nul') do (
+    set "LINE=%%A"
+    if "!LINE:~0,5!"=="AUTH=" set "AUTH_TOKEN=!LINE:~5!"
+    if "!LINE:~0,4!"=="URL="  set "BEDROCK_URL=!LINE:~4!"
+    if "!LINE:~0,5!"=="CERT=" set "SSL_CERT=!LINE:~5!"
+    if "!LINE:~0,4!"=="ERR="  echo  WARNING: Could not parse settings.json - !LINE:~4!
 )
+if not "!AUTH_TOKEN!"=="" (
+    echo  Credentials found - AI Analysis will be configured.
+) else (
+    echo  WARNING: No ANTHROPIC_AUTH_TOKEN in settings.json - AI Analysis disabled.
+)
+goto :after_claude
 
-:: ── 4. Write backend\.env ──────────────────────────────────
+:no_claude
+echo.
+echo  NOTE: Claude Code is not installed on this machine.
+echo  Salesforce provides Claude deployed on AWS Bedrock, which requires
+echo  Claude Code to be installed and configured with your Salesforce
+echo  credentials. Since it is not detected here, everything in the app
+echo  will work normally EXCEPT the AI Analysis of TCP captures.
+echo  To enable AI Analysis, install Claude Code via your Salesforce
+echo  IT portal and re-run this script.
+echo.
+
+:after_claude
+
+:: ── 4. Write backend\.env ───────────────────────────────────
 echo.
 echo [4/7] Writing backend\.env...
 
 set "ENV_FILE=%BACKEND_DIR%\.env"
 echo # Auto-generated by install.bat - do not commit > "%ENV_FILE%"
-if not "!AUTH_TOKEN!"==""  echo ANTHROPIC_AUTH_TOKEN=!AUTH_TOKEN!  >> "%ENV_FILE%"
+if not "!AUTH_TOKEN!"==""  echo ANTHROPIC_AUTH_TOKEN=!AUTH_TOKEN! >> "%ENV_FILE%"
 if not "!BEDROCK_URL!"=="" echo ANTHROPIC_BEDROCK_BASE_URL=!BEDROCK_URL! >> "%ENV_FILE%"
 if not "!SSL_CERT!"==""    echo SSL_CERT_FILE=!SSL_CERT! >> "%ENV_FILE%"
 echo  Written: %ENV_FILE%
 
-:: Quick connectivity check - warn but never block
-if not "!BEDROCK_URL!"=="" (
-    echo  Testing AI gateway connectivity...
-
-    (
-        echo import urllib.request, ssl, os, sys
-        echo url  = sys.argv[1]
-        echo cert = sys.argv[2] if len(sys.argv) > 2 else ''
-        echo try:
-        echo     ctx = ssl.create_default_context()
-        echo     if cert and os.path.exists(cert):
-        echo         ctx.load_verify_locations(cert)
-        echo     urllib.request.urlopen(url, timeout=5, context=ctx)
-        echo     print('REACHABLE')
-        echo except:
-        echo     print('UNREACHABLE')
-    ) > "%TMP_PY%"
-
-    for /f "delims=" %%R in ('!PYTHON! "%TMP_PY%" "!BEDROCK_URL!" "!SSL_CERT!" 2^>nul') do set "GW_STATUS=%%R"
-
-    if "!GW_STATUS!"=="REACHABLE" (
-        echo  AI gateway reachable - full AI Analysis enabled.
-    ) else (
-        echo.
-        echo  NOTICE: The Salesforce AI gateway is not reachable from this machine.
-        echo  This is normal on machines outside the Salesforce corporate network.
-        echo  AI Analysis will show "not available" - all PCAP analysis features
-        echo  work normally without it.
-        echo.
-    )
+if "!BEDROCK_URL!"=="" goto :skip_gateway
+echo  Testing AI gateway connectivity...
+set "GW_STATUS=UNREACHABLE"
+for /f "delims=" %%R in ('!PYTHON! "%TMP_CONNECT%" "!BEDROCK_URL!" "!SSL_CERT!" 2^>nul') do set "GW_STATUS=%%R"
+if "!GW_STATUS!"=="REACHABLE" (
+    echo  AI gateway reachable - full AI Analysis enabled.
+) else (
+    echo.
+    echo  NOTICE: The Salesforce AI gateway is not reachable from this machine.
+    echo  This is normal outside the Salesforce corporate network.
+    echo  AI Analysis will show "not available" - all PCAP features work normally.
+    echo.
 )
+:skip_gateway
 
-:: ── 5. Python venv + dependencies ──────────────────────────
+:: ── 5. Python venv + dependencies ───────────────────────────
 echo.
 echo [5/7] Installing Python dependencies...
 
@@ -180,16 +173,14 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
     !PYTHON! -m venv "%VENV_DIR%"
     if errorlevel 1 ( echo  ERROR: venv creation failed. & pause & exit /b 1 )
 )
-
 set "VENV_PYTHON=%VENV_DIR%\Scripts\python.exe"
 set "VENV_PIP=%VENV_DIR%\Scripts\pip.exe"
-
 "%VENV_PYTHON%" -m pip install --upgrade pip --quiet
 "%VENV_PIP%" install -r "%BACKEND_DIR%\requirements.txt"
 if errorlevel 1 ( echo  ERROR: pip install failed. & pause & exit /b 1 )
 echo  Python dependencies installed.
 
-:: ── 6. Node / frontend deps ────────────────────────────────
+:: ── 6. Node / frontend deps ─────────────────────────────────
 echo.
 echo [6/7] Installing Node.js dependencies...
 
@@ -198,14 +189,13 @@ call npm install
 if errorlevel 1 ( echo  ERROR: npm install failed. & pause & exit /b 1 )
 echo  Node dependencies installed.
 
-:: Cleanup temp file
-if exist "%TMP_PY%" del /q "%TMP_PY%"
+del /q "%TMP_SETTINGS%" 2>nul
+del /q "%TMP_CONNECT%"  2>nul
 
-:: ── 7. Launch ──────────────────────────────────────────────
+:: ── 7. Launch ────────────────────────────────────────────────
 echo.
 echo [7/7] Starting servers...
 
-:: Pick a free backend port
 set "BACKEND_PORT=8001"
 netstat -ano 2>nul | findstr ":8001 " | findstr "LISTENING" >nul 2>&1
 if not errorlevel 1 (
@@ -217,8 +207,8 @@ echo.
 echo  Backend : http://localhost:!BACKEND_PORT!
 echo  Frontend: http://localhost:5173
 echo.
-echo  Two new windows will open for backend and frontend.
-echo  Close them to stop the servers.
+echo  Two new windows will open for the servers.
+echo  Close them to stop the app.
 echo.
 
 start "TCP Analyzer Backend" cmd /k "cd /d "%BACKEND_DIR%" && "%VENV_PYTHON%" -m uvicorn app.main:app --host 0.0.0.0 --port !BACKEND_PORT! --reload"
