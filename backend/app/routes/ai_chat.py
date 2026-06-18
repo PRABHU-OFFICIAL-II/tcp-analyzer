@@ -1,5 +1,6 @@
 import os
 import json
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -261,10 +262,12 @@ async def chat(req: ChatRequest):
                         yield f"data: {json.dumps({'text': text})}\n\n"
             yield "data: [DONE]\n\n"
         except anthropic.APIStatusError as e:
-            import traceback; traceback.print_exc()
             yield f"data: {json.dumps({'error': f'Claude API error ({e.status_code}): {e.message}'})}\n\n"
+        except httpx.ConnectTimeout:
+            yield f"data: {json.dumps({'text': 'The AI chat is not available on this deployment — the network cannot reach the AI gateway. The rest of the TCP Analyzer (analysis, reports, exports) works normally.'})}\n\n"
+        except httpx.ConnectError:
+            yield f"data: {json.dumps({'text': 'The AI chat is not available on this deployment — the network cannot reach the AI gateway. The rest of the TCP Analyzer (analysis, reports, exports) works normally.'})}\n\n"
         except Exception as e:
-            import traceback; traceback.print_exc()
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(
