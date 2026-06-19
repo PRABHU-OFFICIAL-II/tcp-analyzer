@@ -6,7 +6,7 @@ A comprehensive network traffic analysis platform that processes PCAP captures a
 
 ## What It Does
 
-Upload a `.pcap`, `.pcapng`, or `.cap` file and the analyzer runs 13 independent analysis modules on your capture:
+Upload a `.pcap`, `.pcapng`, or `.cap` file and the analyzer runs 15 independent analysis modules on your capture:
 
 | Module | What It Detects |
 |---|---|
@@ -20,9 +20,13 @@ Upload a `.pcap`, `.pcapng`, or `.cap` file and the analyzer runs 13 independent
 | **Geo** | GeoIP lookup (country, city, ISP) via ip-api.com |
 | **IOC** | Local blocklist matching + AbuseIPDB API integration (score ≥ 50% flagged) |
 | **ARP** | ARP spoofing detection (same IP seen with multiple MACs) |
-| **RST Forensics** | Root cause classification for every TCP reset (9 categories: port closed, firewall, TLS rejection, resource exhaustion, app crash, NAT timeout, etc.) |
+| **RST Forensics** | Root cause classification for every TCP reset (10 categories: port closed, firewall, TLS rejection, resource exhaustion, app crash, NAT timeout, etc.) — returns both a summarized evidence chain and a full packet-by-packet trace per reset event |
+| **MAC Map** | Full MAC address inventory — maps each MAC to IPs and resolves hostnames via DHCP, NetBIOS, mDNS, and DNS PTR; enriches with OUI manufacturer name |
+| **Proxy** | Proxy detection via 7 independent signals (CONNECT tunnels, proxy headers, SOCKS, known proxy ports, third-party relaying) |
+| **HTTP Objects** | Reconstructed HTTP request/response pairs (method, host, path, status code, response size) |
+| **DNS Map** | Per-query DNS records, NXDOMAIN/SERVFAIL counts, top queried domains |
 
-Results are shown in a 10-tab report viewer. You can also compare two captures side-by-side and export reports as JSON, CSV, or PDF.
+Results are shown in a 15-tab report viewer. You can also compare two captures side-by-side and export reports as JSON, CSV, or PDF.
 
 ---
 
@@ -30,29 +34,38 @@ Results are shown in a 10-tab report viewer. You can also compare two captures s
 
 ```
 tcp-analyzer/
-├── backend/          # FastAPI + Scapy — analysis engine and REST API
+├── backend/
 │   ├── app/
-│   │   ├── analyzers/    # 13 analysis modules + orchestration engine
-│   │   ├── routes/       # /analyze, /history, /export, /compare
+│   │   ├── analyzers/    # 15 analysis modules + orchestration engine
+│   │   ├── routes/       # /analyze, /history, /export, /compare, /settings, /ai-chat
 │   │   ├── models/       # Pydantic schemas
 │   │   ├── main.py       # FastAPI app entry point
+│   │   ├── thresholds.py # Runtime threshold logic
 │   │   └── db.py         # SQLite persistence
 │   ├── data/
-│   │   ├── analyses.db   # Auto-created SQLite database
-│   │   └── blocklist.txt # Local IOC list (one IP per line)
+│   │   ├── analyses.db      # Auto-created SQLite database
+│   │   ├── blocklist.txt    # Local IOC list (one IP per line)
+│   │   └── thresholds.json  # User-configurable analysis thresholds
+│   ├── Dockerfile
+│   ├── .dockerignore
 │   └── requirements.txt
-├── frontend/         # React + Vite — upload, report viewer, history, compare
+├── frontend/
 │   ├── src/
-│   │   ├── pages/        # UploadPage, ReportPage, HistoryPage, ComparePage
-│   │   └── components/   # Charts, tables, panels
+│   │   ├── pages/        # UploadPage, ReportPage, HistoryPage, ComparePage, SettingsPage
+│   │   └── components/   # Charts, tables, panels, AIChatPanel
+│   ├── nginx.conf        # nginx config used inside the Docker container
+│   ├── Dockerfile
+│   ├── .dockerignore
 │   └── package.json
-├── install.bat       # Windows — full install + launch (all-in-one)
-└── install.sh        # Linux / macOS — full install + launch (all-in-one)
+├── docker-compose.yml    # Run both containers with a single command
+├── install.bat           # Windows — full install + launch (all-in-one)
+└── install.sh            # Linux / macOS — full install + launch (all-in-one)
 ```
 
 - **Backend** runs on `http://localhost:8001` (falls back to `8002` if occupied)
 - **Frontend** runs on `http://localhost:5173`
 - Vite proxies all `/api/*` requests to the backend automatically
+- In Docker, nginx on port `80` replaces the Vite dev server and proxies `/api/*` to the backend container
 
 ---
 
@@ -91,6 +104,59 @@ chmod +x install.sh
 Then open `http://localhost:5173` in your browser.
 
 To stop: close the terminal windows that opened for the backend and frontend (Windows), or press `Ctrl+C` in the install.sh session (Linux/macOS).
+
+---
+
+## Run via Docker
+
+Pre-built images are published to GitHub Container Registry. Docker is the only requirement — no Python, Node.js, or git needed on the host.
+
+**1. Create a `backend.env` file** with your credentials (copy from `backend/.env` or start empty):
+```bash
+# Required only for AI Analysis — leave blank to skip
+ANTHROPIC_AUTH_TOKEN=
+ANTHROPIC_BEDROCK_BASE_URL=
+SSL_CERT_FILE=
+# Optional — enables AbuseIPDB threat scoring
+ABUSEIPDB_API_KEY=
+```
+
+**2. Create a `docker-compose.yml`:**
+```yaml
+services:
+  backend:
+    image: ghcr.io/prabhu-official-ii/tcp-analyzer-backend:latest
+    env_file: ./backend.env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/prabhu-official-ii/tcp-analyzer-frontend:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+```
+
+**3. Pull and run:**
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Open `http://localhost` in your browser.
+
+```bash
+# Stop
+docker compose down
+
+# Update to latest images
+docker compose pull && docker compose up -d
+```
+
+The `./data/` directory is volume-mounted so `analyses.db` and `blocklist.txt` persist across container restarts and image updates.
 
 ---
 
@@ -233,7 +299,7 @@ The AI Analysis tab uses the Salesforce-deployed Claude model via AWS Bedrock. I
 1. Have Claude Code installed and configured with a valid `ANTHROPIC_AUTH_TOKEN`
 2. Can reach the `ANTHROPIC_BEDROCK_BASE_URL` endpoint (i.e., are on the Salesforce corporate network or VPN)
 
-If either condition is not met, the AI Analysis tab shows a "not available on this deployment" message. All other PCAP analysis features (the 13 modules, export, comparison, history) work normally without AI access.
+If either condition is not met, the AI Analysis tab shows a "not available on this deployment" message. All other PCAP analysis features (the 15 modules, export, comparison, history) work normally without AI access.
 
 ---
 
@@ -336,15 +402,22 @@ The backend is not running or is on a different port. Make sure `uvicorn` is run
 ## Tech Stack
 
 **Backend**
-- Python 3.10+
+- Python 3.11
 - FastAPI — REST API framework
 - Uvicorn — ASGI server
 - Scapy — Packet parsing and protocol dissection
 - fpdf2 — PDF generation
 - SQLite — Analysis history persistence
+- anthropic — Salesforce Bedrock AI gateway client
+- python-dotenv — `.env` file loading
 
 **Frontend**
 - React 18
 - Vite — Dev server and bundler
 - Recharts — Throughput and geo distribution charts
 - Lucide React — Icons
+- nginx — Production web server (Docker deployment)
+
+**Infrastructure**
+- Docker + Docker Compose — containerised deployment
+- GitHub Container Registry (GHCR) — published images
