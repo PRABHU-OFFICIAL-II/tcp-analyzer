@@ -46,65 +46,91 @@ tcp-analyzer/
 │   │   ├── pages/        # UploadPage, ReportPage, HistoryPage, ComparePage
 │   │   └── components/   # Charts, tables, panels
 │   └── package.json
-├── setup.bat / setup.sh / setup.ps1   # First-time environment setup
-└── start.bat / start.sh / start.ps1   # Launch both servers
+├── install.bat       # Windows — full install + launch (all-in-one)
+└── install.sh        # Linux / macOS — full install + launch (all-in-one)
 ```
 
-- **Backend** runs on `http://localhost:8000`
+- **Backend** runs on `http://localhost:8001` (falls back to `8002` if occupied)
 - **Frontend** runs on `http://localhost:5173`
 - Vite proxies all `/api/*` requests to the backend automatically
 
 ---
 
-## Prerequisites
+## Deployment Model
 
-| Requirement | Minimum Version | Check |
-|---|---|---|
-| Python | 3.10+ | `python --version` |
-| Node.js | 18+ | `node --version` |
-| npm | 9+ | `npm --version` |
+**All deployment is handled by the install scripts.** There are no separate setup and start steps, and no platform-level pre-installation required.
 
-> **Windows users**: Npcap or WinPcap is required by Scapy for live capture. For PCAP file analysis only, it is not required.
+`install.bat` (Windows) and `install.sh` (Linux/macOS) are the single entry points. Each script:
+
+1. Detects and installs missing system dependencies (git, Python 3.9+, Node.js, npm, libpcap) using the platform's native package manager — `winget` on Windows, `apt`/`dnf`/`brew`/etc. on Linux/macOS
+2. Clones the repository (or pulls latest if already cloned) into `~/tcp-analyzer`
+3. Reads Claude Code `settings.json` to auto-configure the Salesforce Bedrock AI gateway credentials
+4. Writes `backend/.env` with the credentials (or an empty file if Claude Code is not installed)
+5. Tests AI gateway reachability and warns if it is not accessible from the current network
+6. Creates the Python virtual environment in `backend/.venv` and installs all Python dependencies
+7. Runs `npm install` in `frontend/`
+8. Launches both servers and opens the browser
+
+The scripts are idempotent — re-running them on a machine that is already set up will pull the latest code and skip steps that are already complete.
 
 ---
 
-## Quick Start (Automated)
+## Quick Start
 
-Setup scripts handle the virtual environment, pip install, and npm install for you.
-
-**Windows (Command Prompt):**
+**Windows (Command Prompt — run as Administrator if winget installs are needed):**
 ```bat
-setup.bat
-start.bat
+install.bat
 ```
 
-**Windows (PowerShell):**
-```powershell
-.\setup.ps1
-.\start.ps1
-```
-
-**macOS / Linux:**
+**Linux / macOS:**
 ```bash
-chmod +x setup.sh start.sh
-./setup.sh
-./start.sh
+chmod +x install.sh
+./install.sh
 ```
 
 Then open `http://localhost:5173` in your browser.
 
-To stop: run `stop.bat` / `stop.ps1` on Windows, or press `Ctrl+C` on macOS/Linux.
+To stop: close the terminal windows that opened for the backend and frontend (Windows), or press `Ctrl+C` in the install.sh session (Linux/macOS).
+
+---
+
+## Known Limitation — Windows PATH Refresh After Fresh Python Install
+
+When `install.bat` installs Python via `winget` on a machine that had no Python at all, the new Python binary is added to the system PATH in the Windows registry. The currently open `cmd.exe` window does not reload the registry PATH automatically.
+
+`install.bat` compensates by appending the expected Python path to `%PATH%` in-session, but if the winget installer places Python at a different location than expected, or the in-session PATH update does not take effect in time, the virtual environment creation step (`python -m venv`) will fail.
+
+**Workaround:** Close the `cmd.exe` window after the Python install completes (the script will print an error at step 5 if this happens), open a new Command Prompt, and re-run `install.bat`. The script will detect that Python is now available, skip reinstalling it, and continue from where it left off.
+
+This is a Windows shell limitation — the PATH set by an installer is only visible to processes started after the registry write. There is no reliable way to refresh it in the current shell without spawning a new process.
+
+---
+
+## Prerequisites
+
+No manual pre-installation is required. The install scripts detect and install the following automatically:
+
+| Requirement | Windows | Linux / macOS |
+|---|---|---|
+| git | `winget install Git.Git` | `apt` / `dnf` / `brew` |
+| Python 3.9+ | `winget install Python.Python.3.12` | `apt` / `dnf` / `brew` / `pacman` |
+| Node.js 18+ / npm | `winget install OpenJS.NodeJS.LTS` | NodeSource LTS or system package manager |
+| libpcap | N/A (not required for file analysis) | `libpcap-dev` / `libpcap-devel` |
+
+> **Windows users**: Npcap or WinPcap is required by Scapy for live packet capture. For PCAP file analysis (the primary use case), it is not required.
+
+If automatic installation fails for any dependency (e.g., corporate policy blocks winget), install that dependency manually and re-run the install script.
 
 ---
 
 ## Manual Setup (Step by Step)
 
-If you prefer to set things up yourself, or the scripts don't work in your environment:
+If you prefer to set things up yourself without the install scripts:
 
 ### 1. Clone the repository
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/PRABHU-OFFICIAL-II/tcp-analyzer.git
 cd tcp-analyzer
 ```
 
@@ -112,8 +138,6 @@ cd tcp-analyzer
 
 ```bash
 cd backend
-
-# Create the virtual environment
 python -m venv .venv
 ```
 
@@ -125,9 +149,6 @@ source .venv/bin/activate
 
 # Windows (Command Prompt)
 .venv\Scripts\activate.bat
-
-# Windows (PowerShell)
-.venv\Scripts\Activate.ps1
 ```
 
 You should see `(.venv)` at the start of your terminal prompt.
@@ -137,8 +158,6 @@ You should see `(.venv)` at the start of your terminal prompt.
 ```bash
 pip install -r requirements.txt
 ```
-
-This installs:
 
 | Package | Purpose |
 |---|---|
@@ -162,10 +181,10 @@ npm install
 From the `backend/` directory with the virtual environment active:
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 ```
 
-The API will be available at `http://localhost:8000`. You can verify it is running at `http://localhost:8000/api/health`.
+The API will be available at `http://localhost:8001`. You can verify it is running at `http://localhost:8001/api/health`.
 
 ### 6. Start the frontend
 
@@ -186,20 +205,35 @@ These are set before starting the backend. None are required — the app works w
 | Variable | Purpose | Default behavior |
 |---|---|---|
 | `ABUSEIPDB_API_KEY` | Enables AbuseIPDB threat intelligence scoring | Falls back to local blocklist only |
+| `ANTHROPIC_AUTH_TOKEN` | Salesforce Bedrock AI gateway auth | AI Analysis tab disabled |
+| `ANTHROPIC_BEDROCK_BASE_URL` | Salesforce Bedrock gateway URL | AI Analysis tab disabled |
+
+The install scripts auto-populate `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BEDROCK_BASE_URL` from Claude Code's `settings.json` if Claude Code is installed. `ABUSEIPDB_API_KEY` must be set manually.
 
 **Windows (Command Prompt):**
 ```bat
 set ABUSEIPDB_API_KEY=your_key_here
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 ```
 
 **macOS / Linux:**
 ```bash
 export ABUSEIPDB_API_KEY=your_key_here
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 ```
 
 You can get a free AbuseIPDB API key at [https://www.abuseipdb.com/api](https://www.abuseipdb.com/api).
+
+---
+
+## AI Analysis
+
+The AI Analysis tab uses the Salesforce-deployed Claude model via AWS Bedrock. It is available only on machines that:
+
+1. Have Claude Code installed and configured with a valid `ANTHROPIC_AUTH_TOKEN`
+2. Can reach the `ANTHROPIC_BEDROCK_BASE_URL` endpoint (i.e., are on the Salesforce corporate network or VPN)
+
+If either condition is not met, the AI Analysis tab shows a "not available on this deployment" message. All other PCAP analysis features (the 13 modules, export, comparison, history) work normally without AI access.
 
 ---
 
@@ -282,22 +316,20 @@ Place test files in `sample_pcaps/` for convenience.
 
 ## Troubleshooting
 
+**`install.bat` fails at step 5 (venv creation) on a fresh Windows machine**
+Python was just installed by winget and the current `cmd.exe` session did not pick up the new PATH. Close the window, open a new Command Prompt, and re-run `install.bat`. See [Known Limitation — Windows PATH Refresh](#known-limitation--windows-path-refresh-after-fresh-python-install) above.
+
 **`ModuleNotFoundError: No module named 'scapy'`**
-The virtual environment is not active. Run the activate command for your OS (see step 2 above) and try again.
+The virtual environment is not active. Run the activate command for your OS (see Manual Setup above) and try again.
 
 **`ERROR: [WinError 5] Access is denied` (Windows, Scapy)**
 Run the terminal as Administrator, or install Npcap from [https://npcap.com](https://npcap.com).
 
 **Frontend shows "Network Error" or blank report**
-The backend is not running or is on a different port. Make sure `uvicorn` is running on port 8000 before starting the frontend.
+The backend is not running or is on a different port. Make sure `uvicorn` is running on port 8001 (or 8002) before starting the frontend.
 
-**`address already in use` on port 8000 or 5173**
-Another process is using the port. On Windows, run `stop.bat` to kill previous instances. On Linux/macOS: `kill $(lsof -t -i:8000)`.
-
-**PowerShell execution policy error**
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-```
+**`address already in use` on port 8001 or 5173**
+`install.bat` automatically falls back to port 8002 if 8001 is occupied. To free the port manually on Windows: `netstat -ano | findstr :8001` then `taskkill /PID <pid> /F`. On Linux/macOS: `kill $(lsof -t -i:8001)`.
 
 ---
 
