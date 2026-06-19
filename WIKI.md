@@ -256,6 +256,104 @@ chmod +x install.sh
 
 ---
 
+### Run via Docker (No Local Setup Required)
+
+Docker is the simplest way to get TCP Analyzer running on any machine. No Python, Node.js, or git installation required — only Docker Desktop.
+
+Pre-built images are published to GitHub Container Registry (GHCR):
+
+| Image | Purpose |
+|---|---|
+| `ghcr.io/prabhu-official-ii/tcp-analyzer-backend:latest` | FastAPI + Scapy analysis engine |
+| `ghcr.io/prabhu-official-ii/tcp-analyzer-frontend:latest` | React frontend served via nginx |
+
+#### How It Works (Docker Architecture)
+
+```
+Browser (http://localhost)
+         │
+         ▼
+   nginx container (port 80)
+         │
+         ├── /        → serves pre-built React static files
+         │
+         └── /api/*   → proxies to backend container (port 8000)
+                            │
+                            ├── Scapy (packet parsing)
+                            ├── 15 Analyzer Modules
+                            └── SQLite (persisted to ./data/ volume)
+```
+
+#### Setup Steps
+
+**Step 1 — Create a `backend.env` file** in your working directory:
+
+```bash
+# All fields are optional — leave blank to run without AI Analysis
+ANTHROPIC_AUTH_TOKEN=
+ANTHROPIC_BEDROCK_BASE_URL=
+SSL_CERT_FILE=
+ABUSEIPDB_API_KEY=
+```
+
+**Step 2 — Create a `docker-compose.yml`** in the same directory:
+
+```yaml
+services:
+  backend:
+    image: ghcr.io/prabhu-official-ii/tcp-analyzer-backend:latest
+    env_file: ./backend.env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/prabhu-official-ii/tcp-analyzer-frontend:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+```
+
+**Step 3 — Pull and start:**
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Open `http://localhost` in your browser.
+
+#### Common Commands
+
+```bash
+# Stop containers
+docker compose down
+
+# View logs
+docker compose logs -f
+
+# Update to the latest images
+docker compose pull && docker compose up -d
+```
+
+#### Data Persistence
+
+The `./data/` directory is volume-mounted into the backend container. This means:
+- `analyses.db` — analysis history survives container restarts and image updates
+- `blocklist.txt` — edit this file on the host; the container picks up changes immediately
+
+#### Port Conflict
+
+If port `80` is already in use on your machine, change the `ports` mapping in `docker-compose.yml`:
+```yaml
+ports:
+  - "8080:80"   # access at http://localhost:8080 instead
+```
+
+---
+
 ### Known Limitation — Windows PATH Refresh After Fresh Python Install
 
 When `install.bat` installs Python via `winget` on a machine with no prior Python installation, the new Python binary is registered in the Windows registry PATH. The currently open `cmd.exe` session does **not** reload the registry PATH automatically.
@@ -309,7 +407,7 @@ All endpoints are prefixed with `/api`. When running locally, the base URL is `h
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/analyze` | Upload a PCAP file (`multipart/form-data`, field: `file`) and run the full 13-module analysis |
+| `POST` | `/api/analyze` | Upload a PCAP file (`multipart/form-data`, field: `file`) and run the full 15-module analysis |
 | `GET` | `/api/health` | Health check — returns `{"status": "ok"}` |
 
 ### History
