@@ -65,7 +65,7 @@ for %%C in (python python3) do (
 if "!PYTHON!"=="" (
     echo  Python 3.9+ not found - installing via winget...
     winget install --id Python.Python.3.12 -e --source winget --silent --accept-package-agreements --accept-source-agreements
-    set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python312;%LOCALAPPDATA%\Programs\Python\Python312\Scripts"
+    set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python311;%LOCALAPPDATA%\Programs\Python\Python311\Scripts;C:\Users\ppenthoi\AppData\Local\Programs\Python\Python311;C:\Users\ppenthoi\AppData\Local\Programs\Python\Python311\Scripts"
     for %%C in (python python3) do (
         if "!PYTHON!"=="" ( where %%C >nul 2>&1 && set "PYTHON=%%C" )
     )
@@ -168,7 +168,16 @@ echo.
 echo [5/7] Installing Python dependencies...
 
 set "VENV_DIR=%BACKEND_DIR%\.venv"
-if not exist "%VENV_DIR%\Scripts\python.exe" (
+set "VENV_OK=0"
+if exist "%VENV_DIR%\Scripts\python.exe" (
+    "%VENV_DIR%\Scripts\python.exe" --version >nul 2>&1
+    if not errorlevel 1 set "VENV_OK=1"
+)
+if "!VENV_OK!"=="0" (
+    if exist "%VENV_DIR%" (
+        echo  Removing broken venv...
+        rmdir /s /q "%VENV_DIR%"
+    )
     echo  Creating virtual environment...
     !PYTHON! -m venv "%VENV_DIR%"
     if errorlevel 1 ( echo  ERROR: venv creation failed. & pause & exit /b 1 )
