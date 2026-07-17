@@ -4,6 +4,7 @@ import {
   Fingerprint, Lock, MapPin, Radio, AlertTriangle,
   Clock, Globe2, Server, Cpu, ShieldAlert,
 } from "lucide-react";
+import ExportBar from "../components/ExportBar.jsx";
 import DiagnosisCard from "../components/DiagnosisCard.jsx";
 import AnomalyTable from "../components/AnomalyTable.jsx";
 import AIChatPanel from "../components/AIChatPanel.jsx";
@@ -100,6 +101,8 @@ export default function ReportPage({ report, onReset }) {
           {report.unique_ips.length} IPs
         </span>
       </div>
+
+      <ExportBar report={report} />
 
       <div style={layout.tabBar}>
         {TABS.map(t => (

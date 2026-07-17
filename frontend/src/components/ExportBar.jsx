@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Download, FileText, FileJson, Globe, Loader } from "lucide-react";
+import { Download, FileText, FileJson, Globe, Loader, FileCode } from "lucide-react";
 
 const EXPORTS = [
-  { label: "PDF",  icon: FileText, color: "#dc2626", bg: "#fef2f2", border: "#fecaca", suffix: "pdf",  mime: "application/pdf" },
-  { label: "CSV",  icon: Download, color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0", suffix: "csv",  mime: "text/csv" },
-  { label: "JSON", icon: FileJson, color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe", suffix: "json", mime: "application/json" },
-  { label: "HTML", icon: Globe,    color: "#d97706", bg: "#fffbeb", border: "#fde68a", suffix: "html", mime: "text/html" },
+  { label: "PDF",      icon: FileText, color: "#dc2626", bg: "#fef2f2", border: "#fecaca", suffix: "pdf",  mime: "application/pdf" },
+  { label: "CSV",      icon: Download, color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0", suffix: "csv",  mime: "text/csv" },
+  { label: "JSON",     icon: FileJson, color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe", suffix: "json", mime: "application/json" },
+  { label: "HTML",     icon: Globe,    color: "#d97706", bg: "#fffbeb", border: "#fde68a", suffix: "html", mime: "text/html" },
+  { label: "Markdown", icon: FileCode, color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe", suffix: "md",   mime: "text/markdown" },
 ];
 
 export default function ExportBar({ report }) {

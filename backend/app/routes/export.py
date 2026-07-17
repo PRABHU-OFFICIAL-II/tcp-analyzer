@@ -305,6 +305,203 @@ def export_html(body: dict):
     )
 
 
+@router.post("/export/md")
+def export_md(body: dict):
+    report = _get_report(body)
+    aid = report.get("analysis_id", "report")[:8]
+
+    def fmt_bytes(b):
+        b = int(b or 0)
+        if b >= 1_000_000: return f"{b/1_000_000:.2f} MB"
+        if b >= 1_000:     return f"{b/1_000:.1f} KB"
+        return f"{b} B"
+
+    SEV_EMOJI = {"critical": "🔴", "warning": "🟡", "info": "🔵", "clean": "🟢"}
+
+    lines = []
+    lines.append(f"# TCP Analyzer Report — {report.get('filename', '')}")
+    lines.append("")
+    lines.append(f"| Field | Value |")
+    lines.append(f"|---|---|")
+    lines.append(f"| **Analysis ID** | `{report.get('analysis_id', '')}` |")
+    lines.append(f"| **Total Packets** | {report.get('total_packets', 0):,} |")
+    lines.append(f"| **Capture Duration** | {report.get('capture_duration_sec', 0):.2f}s |")
+    lines.append(f"| **Unique IPs** | {len(report.get('unique_ips', []))} |")
+    lines.append("")
+
+    # Diagnoses
+    lines.append("## Diagnoses")
+    lines.append("")
+    diags = report.get("diagnoses", [])
+    if diags:
+        lines.append("| Severity | Finding | Details |")
+        lines.append("|---|---|---|")
+        for d in diags:
+            sev = d.get("severity", "info")
+            emoji = SEV_EMOJI.get(sev, "⚪")
+            details = "; ".join(d.get("details", []))
+            lines.append(f"| {emoji} {sev.upper()} | **{d.get('headline', '')}** | {details} |")
+    else:
+        lines.append("_No diagnoses generated._")
+    lines.append("")
+
+    # Performance
+    perf = report.get("performance", {})
+    lines.append("## Performance")
+    lines.append("")
+    lines.append(f"| Metric | Value |")
+    lines.append(f"|---|---|")
+    lines.append(f"| Retransmission Rate | {perf.get('retransmission_rate_pct', 0):.2f}% |")
+    lines.append(f"| Retransmission Count | {perf.get('retransmission_count', 0)} |")
+    lines.append(f"| Avg Handshake | {perf.get('avg_handshake_ms') or '—'} ms |")
+    lines.append(f"| P95 Handshake | {perf.get('p95_handshake_ms') or '—'} ms |")
+    lines.append(f"| Zero Window Events | {perf.get('zero_window_count', 0)} |")
+    lines.append("")
+
+    # Security
+    sec = report.get("security", {})
+    all_sec = [
+        e for section in ["port_scan_sources", "cleartext_credentials",
+                           "protocol_port_mismatches", "exfiltration_indicators",
+                           "scanner_signatures"]
+        for e in sec.get(section, [])
+    ]
+    lines.append("## Security Findings")
+    lines.append("")
+    if all_sec:
+        lines.append("| Src IP | Dst IP | Severity | Detail |")
+        lines.append("|---|---|---|---|")
+        for e in all_sec[:100]:
+            sev = e.get("severity", "info")
+            lines.append(f"| `{e.get('src_ip', '')}` | `{e.get('dst_ip', '')}` | {SEV_EMOJI.get(sev, '')} {sev.upper()} | {e.get('detail', '')} |")
+    else:
+        lines.append("_No security findings._")
+    lines.append("")
+
+    # Protocol
+    proto = report.get("protocol", {})
+    lines.append("## Protocol")
+    lines.append("")
+    lines.append(f"| Metric | Value |")
+    lines.append(f"|---|---|")
+    lines.append(f"| Total Connections | {proto.get('total_connections', 0)} |")
+    lines.append(f"| RST Rate | {proto.get('reset_rate_pct', 0):.2f}% |")
+    lines.append(f"| HTTP Error Rate | {proto.get('http_error_rate_pct', 0):.2f}% |")
+    lines.append(f"| TLS Failures | {len(proto.get('tls_failures', []))} |")
+    lines.append(f"| DNS Errors | {len(proto.get('dns_errors', []))} |")
+    lines.append("")
+
+    # Top Flows
+    flows = (report.get("flow") or {}).get("flows", [])[:30]
+    lines.append("## Top Flows")
+    lines.append("")
+    if flows:
+        lines.append("| Source | Destination | Protocol | Packets | Bytes | Duration |")
+        lines.append("|---|---|---|---|---|---|")
+        for f in flows:
+            lines.append(
+                f"| `{f['src_ip']}:{f['src_port']}` | `{f['dst_ip']}:{f['dst_port']}` "
+                f"| {f['protocol']} | {f['packets']} | {fmt_bytes(f['bytes'])} | {f['duration_sec']}s |"
+            )
+    else:
+        lines.append("_No flows captured._")
+    lines.append("")
+
+    # HTTP Objects
+    http_objs = (report.get("http_objects") or {}).get("objects", [])[:50]
+    lines.append("## HTTP Objects")
+    lines.append("")
+    if http_objs:
+        lines.append("| Method | Host | Path | Status | Size |")
+        lines.append("|---|---|---|---|---|")
+        for o in http_objs:
+            lines.append(
+                f"| **{o.get('method', '')}** | `{o.get('host', '')}` | `{o.get('path', '')}` "
+                f"| {o.get('status_code', '—')} | {fmt_bytes(o.get('response_size', 0))} |"
+            )
+    else:
+        lines.append("_No HTTP objects reconstructed._")
+    lines.append("")
+
+    # DNS
+    dns_records = (report.get("dns_map") or {}).get("records", [])[:50]
+    lines.append("## DNS Records")
+    lines.append("")
+    if dns_records:
+        lines.append("| Domain | Type | Answers | RCode |")
+        lines.append("|---|---|---|---|")
+        for r in dns_records:
+            answers = ", ".join(r.get("responses", [])[:3])
+            lines.append(f"| `{r.get('query', '')}` | {r.get('query_type', '')} | {answers or '—'} | {r.get('rcode', 0)} |")
+    else:
+        lines.append("_No DNS records captured._")
+    lines.append("")
+
+    # MAC Map
+    mac_entries = (report.get("mac_map") or {}).get("entries", [])
+    lines.append("## MAC Address Map")
+    lines.append("")
+    if mac_entries:
+        lines.append("| MAC | Manufacturer | Hostname | Source | IPs |")
+        lines.append("|---|---|---|---|---|")
+        for e in mac_entries:
+            ips = ", ".join(e.get("ips", []))
+            lines.append(
+                f"| `{e.get('mac', '')}` | {e.get('manufacturer', '—')} "
+                f"| {e.get('hostname') or '—'} | {e.get('hostname_source', '—')} | `{ips}` |"
+            )
+    else:
+        lines.append("_No MAC entries captured._")
+    lines.append("")
+
+    # Beacons
+    beacons = (report.get("beacons") or {}).get("beacons", [])
+    lines.append("## Beacon Detection")
+    lines.append("")
+    if beacons:
+        lines.append("| Src IP | Dst IP | Port | Connections | Avg Interval | CV |")
+        lines.append("|---|---|---|---|---|---|")
+        for b in beacons:
+            lines.append(
+                f"| `{b['src_ip']}` | `{b['dst_ip']}` | {b['dst_port']} "
+                f"| {b['connection_count']} | {b['avg_interval_sec']}s | {b['cv']:.3f} |"
+            )
+    else:
+        lines.append("_No beaconing detected._")
+    lines.append("")
+
+    # RST Forensics
+    rst = report.get("rst_forensics") or {}
+    rst_classified = rst.get("classified", [])
+    lines.append("## RST Forensics")
+    lines.append("")
+    lines.append(f"**Total Resets:** {rst.get('total_resets', 0)}")
+    lines.append("")
+    if rst_classified:
+        lines.append("| Src IP | Dst IP | Root Cause | Confidence | Severity |")
+        lines.append("|---|---|---|---|---|")
+        for r in rst_classified[:50]:
+            sev = r.get("severity", "info")
+            lines.append(
+                f"| `{r.get('src_ip', '')}` | `{r.get('dst_ip', '')}` "
+                f"| {r.get('root_cause', '')} | {r.get('confidence', '')} "
+                f"| {SEV_EMOJI.get(sev, '')} {sev.upper()} |"
+            )
+    else:
+        lines.append("_No RST events classified._")
+    lines.append("")
+
+    lines.append("---")
+    lines.append(f"_Generated by TCP Analyzer — {report.get('filename', '')}_")
+
+    content = "\n".join(lines)
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="report_{aid}.md"'},
+    )
+
+
 @router.post("/export/pdf")
 def export_pdf(body: dict):
     report = _get_report(body)
