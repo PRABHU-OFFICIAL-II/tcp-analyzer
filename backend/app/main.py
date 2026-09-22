@@ -20,7 +20,7 @@ from .routes.ai_chat import router as ai_chat_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db.init_db()
+    await db.init_db()
     yield
 
 

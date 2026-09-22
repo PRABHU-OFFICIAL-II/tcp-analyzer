@@ -96,13 +96,12 @@ def analyze_security(packets) -> SecurityMetrics:
                 for pattern, label in CLEARTEXT_PATTERNS:
                     match = pattern.search(payload)
                     if match:
-                        value_preview = match.group(1)[:20].decode("utf-8", errors="replace")
                         metrics.cleartext_credentials.append(AnomalyEntry(
                             src_ip=src, dst_ip=dst,
                             src_port=sport, dst_port=dport,
                             packet_number=packet_number,
                             timestamp=ts,
-                            detail=f"{label} transmitted in cleartext (preview: {value_preview!r})",
+                            detail=f"{label} transmitted in cleartext",
                             severity="critical"
                         ))
 

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
-import { Upload, ShieldCheck, Zap, Activity, GitCompare, Settings, Network, Lock, Radio, BarChart2 } from "lucide-react";
+import { Upload, ShieldCheck, Zap, Activity, GitCompare, Settings, Network, Lock, Radio, BarChart2, Clock } from "lucide-react";
 
-export default function UploadPage({ onUpload, loading, error, onCompare, onSettings }) {
+export default function UploadPage({ onUpload, loading, error, onCompare, onSettings, onHistory }) {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -40,6 +40,14 @@ export default function UploadPage({ onUpload, loading, error, onCompare, onSett
           </span>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button className="nav-btn" onClick={onHistory} style={{
+            background: "transparent", border: "1px solid #e2e8f0", color: "#475569",
+            borderRadius: "8px", padding: "0.4rem 0.9rem", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: "0.4rem",
+            fontSize: "0.83rem", fontWeight: 500, transition: "all 0.15s",
+          }}>
+            <Clock size={14} /> History
+          </button>
           <button className="nav-btn" onClick={onCompare} style={{
             background: "transparent", border: "1px solid #e2e8f0", color: "#475569",
             borderRadius: "8px", padding: "0.4rem 0.9rem", cursor: "pointer",

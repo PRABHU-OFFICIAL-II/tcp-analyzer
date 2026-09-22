@@ -1,18 +1,14 @@
-import sqlite3
+import aiosqlite
 import json
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent.parent / "data" / "analyses.db"
 
 
-def _conn():
+async def init_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(str(DB_PATH))
-
-
-def init_db():
-    with _conn() as c:
-        c.execute("""
+    async with aiosqlite.connect(str(DB_PATH)) as c:
+        await c.execute("""
             CREATE TABLE IF NOT EXISTS analyses (
                 id            TEXT PRIMARY KEY,
                 filename      TEXT NOT NULL,
@@ -21,12 +17,12 @@ def init_db():
                 report_json   TEXT NOT NULL
             )
         """)
-        c.commit()
+        await c.commit()
 
 
-def save_report(report_dict: dict):
-    with _conn() as c:
-        c.execute(
+async def save_report(report_dict: dict):
+    async with aiosqlite.connect(str(DB_PATH)) as c:
+        await c.execute(
             "INSERT OR REPLACE INTO analyses (id, filename, timestamp, total_packets, report_json) VALUES (?,?,?,?,?)",
             (
                 report_dict["analysis_id"],
@@ -36,39 +32,41 @@ def save_report(report_dict: dict):
                 json.dumps(report_dict),
             ),
         )
-        c.commit()
+        await c.commit()
 
 
-def list_reports():
-    with _conn() as c:
-        rows = c.execute(
+async def list_reports():
+    async with aiosqlite.connect(str(DB_PATH)) as c:
+        async with c.execute(
             "SELECT id, filename, timestamp, total_packets FROM analyses ORDER BY timestamp DESC"
-        ).fetchall()
+        ) as cursor:
+            rows = await cursor.fetchall()
     return [
         {"id": r[0], "filename": r[1], "timestamp": r[2], "total_packets": r[3]}
         for r in rows
     ]
 
 
-def get_report(analysis_id: str):
-    with _conn() as c:
-        row = c.execute(
+async def get_report(analysis_id: str):
+    async with aiosqlite.connect(str(DB_PATH)) as c:
+        async with c.execute(
             "SELECT report_json FROM analyses WHERE id=?", (analysis_id,)
-        ).fetchone()
+        ) as cursor:
+            row = await cursor.fetchone()
     if row is None:
         return None
     return json.loads(row[0])
 
 
-def delete_report(analysis_id: str) -> bool:
-    with _conn() as c:
-        cur = c.execute("DELETE FROM analyses WHERE id=?", (analysis_id,))
-        c.commit()
-    return cur.rowcount > 0
+async def delete_report(analysis_id: str) -> bool:
+    async with aiosqlite.connect(str(DB_PATH)) as c:
+        cursor = await c.execute("DELETE FROM analyses WHERE id=?", (analysis_id,))
+        await c.commit()
+    return cursor.rowcount > 0
 
 
-def delete_all_reports() -> int:
-    with _conn() as c:
-        cur = c.execute("DELETE FROM analyses")
-        c.commit()
-    return cur.rowcount
+async def delete_all_reports() -> int:
+    async with aiosqlite.connect(str(DB_PATH)) as c:
+        cursor = await c.execute("DELETE FROM analyses")
+        await c.commit()
+    return cursor.rowcount

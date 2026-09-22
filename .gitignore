@@ -36,3 +36,9 @@ coverage/
 *.swp
 *.tmp
 *.bak
+
+# SQLite database (may contain analyzed PCAP data)
+backend/data/*.db
+
+# Virtual environment
+.venv/

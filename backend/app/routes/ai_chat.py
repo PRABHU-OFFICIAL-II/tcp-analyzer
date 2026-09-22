@@ -211,10 +211,8 @@ async def chat(req: ChatRequest):
         try:
             if use_bedrock:
                 model_id = "global.anthropic.claude-sonnet-4-6"
-                ca_bundle = os.environ.get(
-                    "SSL_CERT_FILE",
-                    r"C:\Users\ppenthoi\.claude\certs\salesforce-ca-bundle.pem"
-                )
+                _cert_env = os.environ.get("SSL_CERT_FILE")
+                ca_bundle = _cert_env if (_cert_env and os.path.exists(_cert_env)) else True
                 url = f"{base_url.rstrip('/')}/model/{model_id}/invoke-with-response-stream"
                 payload = {
                     "anthropic_version": "bedrock-2023-05-31",
